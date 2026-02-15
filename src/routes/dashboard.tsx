@@ -3,6 +3,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useSiteSpec } from "@/hooks/useSiteSpec";
 import { useDebouncedSave } from "@/hooks/useDebouncedSave";
 import { DashboardShell } from "@/components/dashboard/DashboardShell";
+import { BusinessDetailsTab } from "@/components/dashboard/BusinessDetailsTab";
 import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
 import type { TabKey } from "@/components/dashboard/TabNav";
 
@@ -49,29 +50,31 @@ export default function DashboardPage() {
     );
   }
 
+  // siteSpec is guaranteed non-null beyond this point
+  const spec = siteSpec;
+
   function renderTabContent(activeTab: TabKey) {
-    // Placeholder content for tabs — replaced in subsequent loops
     switch (activeTab) {
       case "business":
-        return <TabPlaceholder label="Business Details" isPending={isPending} debouncedUpdate={debouncedUpdate} />;
+        return <BusinessDetailsTab siteSpec={spec} onFieldChange={debouncedUpdate} />;
       case "design":
-        return <TabPlaceholder label="Design" isPending={isPending} debouncedUpdate={debouncedUpdate} />;
+        return <TabPlaceholder label="Design" isPending={isPending} />;
       case "content":
-        return <TabPlaceholder label="Content" isPending={isPending} debouncedUpdate={debouncedUpdate} />;
+        return <TabPlaceholder label="Content" isPending={isPending} />;
       case "photos":
-        return <TabPlaceholder label="Photos" isPending={isPending} debouncedUpdate={debouncedUpdate} />;
+        return <TabPlaceholder label="Photos" isPending={isPending} />;
       case "contact":
-        return <TabPlaceholder label="Contact & Social" isPending={isPending} debouncedUpdate={debouncedUpdate} />;
+        return <TabPlaceholder label="Contact & Social" isPending={isPending} />;
       case "seo":
-        return <TabPlaceholder label="SEO" isPending={isPending} debouncedUpdate={debouncedUpdate} />;
+        return <TabPlaceholder label="SEO" isPending={isPending} />;
       case "preview":
-        return <TabPlaceholder label="Preview & Publish" isPending={isPending} debouncedUpdate={debouncedUpdate} />;
+        return <TabPlaceholder label="Preview & Publish" isPending={isPending} />;
     }
   }
 
   return (
     <DashboardShell
-      siteSpec={siteSpec}
+      siteSpec={spec}
       loading={false}
       error={error}
     >
@@ -84,7 +87,6 @@ export default function DashboardPage() {
 interface TabPlaceholderProps {
   label: string;
   isPending: boolean;
-  debouncedUpdate: unknown;
 }
 
 function TabPlaceholder({ label, isPending }: TabPlaceholderProps) {

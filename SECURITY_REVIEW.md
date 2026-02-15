@@ -1,11 +1,122 @@
 # Security Review -- Phase 5: Instructor Admin
 
-**Date:** 2026-02-15T20:30:00Z
+**Date:** 2026-02-15T20:30:00Z (Round 1), 2026-02-15T21:00:00Z (Round 2)
 **Branch:** phase-5-instructor-admin
 **PR:** #5
 **Reviewer:** Security Agent
-**Result:** ISSUES FOUND (7 findings: 0 Critical, 1 High, 2 Medium, 4 Low)
+**Result:** CLEAN after Round 2 (3/3 mandatory fixes verified, 0 new findings)
 
+---
+
+## Round 2: Fix Verification
+
+**Fix Commit:** `bb8e39b` — `dev: address SEC-028 SEC-029 SEC-030 from security review`
+
+### SEC-028 (High): Cross-Tenant Profile Reassignment -- VERIFIED FIXED
+
+**File:** `supabase/functions/invite/index.ts`:342-360
+**What was fixed:**
+1. The `.select("id")` query was changed to `.select("id, tenant_id")` to include tenant information (line 344)
+2. A guard `existingProfile.tenant_id !== tenantId` was added before the session_id update (line 353)
+3. When the guard triggers, the request is rejected with error `"This email belongs to a different organisation."` and processing continues to the next email via `continue` (lines 354-359)
+
+**Verification:**
+- The select includes `tenant_id` -- CONFIRMED at line 344
+- The guard prevents cross-tenant session_id updates -- CONFIRMED at lines 353-359
+- No magic link is generated for cross-tenant users (the `continue` skips the entire block) -- CONFIRMED
+- The update at lines 365-370 only executes for same-tenant profiles -- CONFIRMED
+
+**Note on error message:** The error `"This email belongs to a different organisation."` confirms to the caller that the email IS registered in a different tenant. This is a minor user-enumeration signal. The original recommendation suggested treating it as "user does not exist" to prevent enumeration. The dev agent chose a more informative error message, which is a valid UX trade-off. The user-enumeration aspect was already documented as a secondary concern in the Round 1 risk description and is LOW severity. The primary threat (cross-tenant write) is fully mitigated.
+
+**Verdict:** RESOLVED
+
+---
+
+### SEC-029 (Medium): Rate Limiter Logic -- VERIFIED FIXED
+
+**File:** `supabase/functions/invite/index.ts`:55-73
+**What was fixed:**
+The rate limiter was restructured to check-before-increment:
+```typescript
+if (entry.count + emailCount > RATE_LIMIT_MAX) {
+  return true;   // Rate limited — count NOT incremented
+}
+
+entry.count += emailCount;
+return false;     // Allowed — count incremented
+```
+
+**Verification (scenario trace):**
+- User at count=90, sends 15: `90 + 15 = 105 > 100` -- returns true, count stays 90 -- CONFIRMED
+- User at count=90, sends 10: `90 + 10 = 100 > 100` is false -- falls through, count becomes 100 -- CONFIRMED
+- User at count=100, sends 1: `100 + 1 = 101 > 100` -- returns true, count stays 100 -- CONFIRMED
+- Fresh user sends 10: no entry, creates entry with count=10, returns false -- CONFIRMED
+
+**Key properties verified:**
+1. Rejected requests do NOT inflate the counter -- CONFIRMED
+2. The counter only increments after the check passes -- CONFIRMED
+3. The effective limit is 100 emails per hour (count + new must exceed 100 to reject) -- CONFIRMED
+
+**Verdict:** RESOLVED
+
+---
+
+### SEC-030 (Medium): Cache-Control on Magic Links Response -- VERIFIED FIXED
+
+**File:** `supabase/functions/invite/index.ts`:461
+**What was fixed:**
+`Cache-Control: no-store` header added to the success response:
+```typescript
+headers: { ...cors, "Content-Type": "application/json", "Cache-Control": "no-store" },
+```
+
+**Verification:**
+- The header is on the status 200 response that contains magic links in the results array -- CONFIRMED at line 461
+- Error responses (4xx) do not include this header, but they also do not contain magic links, so this is correct
+- `no-store` instructs browsers, proxies, and CDNs not to cache this response at all
+
+**Verdict:** RESOLVED
+
+---
+
+## New Findings from Fix Review
+
+No new vulnerabilities were introduced by the fixes. The changes are strictly:
+- An additional column in a select query (additive, no new attack surface)
+- A conditional guard with `continue` (reduces attack surface)
+- A reordering of check-vs-increment in the rate limiter (reduces attack surface)
+- An additional response header (additive, improves security posture)
+
+---
+
+## Prior Findings Regression Check (Round 2)
+
+| Finding | File | Check | Status |
+|---------|------|-------|--------|
+| SEC-017 (Phase 3) | `src/lib/site-generator.ts` | `isValidHexColour()` present | No regression |
+| SEC-018 (Phase 3) | `src/lib/pages/shared.ts` | `isValidSocialLink()` present | No regression |
+| SEC-019 (Phase 4) | `supabase/functions/build/index.ts` | `UUID_REGEX` validation present | No regression |
+| SEC-020 (Phase 4) | `supabase/functions/build/index.ts` | `SAFE_PATH_REGEX` allowlist present | No regression |
+| SEC-021 (Phase 4) | `src/lib/pages/home.ts` | `.replace(/</g, "\\u003c")` present | No regression |
+| SEC-022 (Phase 4) | `src/lib/pages/contact.ts` | `bookingUrl.startsWith("https://")` present | No regression |
+
+---
+
+## Round 2 Summary
+
+| Metric | Value |
+|--------|-------|
+| Mandatory fixes requested (Round 1) | 3 (SEC-028, SEC-029, SEC-030) |
+| Fixes verified correct (Round 2) | 3/3 |
+| New vulnerabilities introduced | 0 |
+| Prior finding regressions | 0 |
+| Open Low/informational findings | 4 (SEC-031, SEC-032, SEC-033, SEC-034) |
+
+### Merge Recommendation
+
+**APPROVE.** All three mandatory fixes (SEC-028 High, SEC-029 Medium, SEC-030 Medium) have been correctly implemented and verified. No new vulnerabilities were introduced. No regressions on prior findings. Four Low/informational findings remain open and do not block merge.
+
+---
 ---
 
 ## Round 1 Findings
@@ -225,7 +336,7 @@ Still intact in `src/lib/pages/contact.ts`:57-63. `bookingUrl.startsWith("https:
 - [PASS] Session status verified as "active" before inviting (line 310)
 - [PASS] Service role key used only server-side in Edge Function, never in client code
 - [PASS] Admin routes protected by `ProtectedRoute` + `RoleGate role="instructor"` in `App.tsx`
-- [FAIL] Existing user re-invite does not verify tenant ownership -- **SEC-028** (High)
+- [PASS] Existing user re-invite verifies tenant ownership (Round 2: SEC-028 RESOLVED)
 
 ### Data Security
 - [PASS] Client hooks (useSessions, useStudents) use anon Supabase client with RLS
@@ -252,8 +363,8 @@ Still intact in `src/lib/pages/contact.ts`:57-63. `bookingUrl.startsWith("https:
 - [PASS] Method restricted to POST only (line 105)
 - [PASS] Proper JSON parse error handling with try/catch (lines 199-206)
 - [PASS] Non-string email elements handled safely (line 329: `typeof rawEmail === "string"`)
-- [WARN] Rate limiter increments before checking limit -- **SEC-029** (Medium)
-- [WARN] Magic links returned in response body -- **SEC-030** (Medium)
+- [PASS] Rate limiter uses check-before-increment logic (Round 2: SEC-029 RESOLVED)
+- [PASS] Response includes Cache-Control: no-store header (Round 2: SEC-030 RESOLVED)
 
 ### Client-Side Hooks
 - [PASS] useSessions scopes all queries by `profile.tenant_id` (lines 34, 49, 56, 109)
@@ -272,15 +383,15 @@ Still intact in `src/lib/pages/contact.ts`:57-63. `bookingUrl.startsWith("https:
 
 ---
 
-## Summary
+## Summary (Round 1)
 
-| Severity | Count | Fixed by Security Agent | Requires Dev Agent |
-|----------|-------|------------------------|--------------------|
+| Severity | Count | Fixed by Dev Agent (Round 2) | Informational |
+|----------|-------|------------------------------|---------------|
 | Critical | 0 | 0 | 0 |
-| High | 1 | 0 | 1 (SEC-028) |
-| Medium | 2 | 0 | 2 (SEC-029, SEC-030) |
-| Low | 4 | 0 | 0 (informational) |
-| **Total** | **7** | **0** | **3** |
+| High | 1 | 1 (SEC-028 RESOLVED) | 0 |
+| Medium | 2 | 2 (SEC-029, SEC-030 RESOLVED) | 0 |
+| Low | 4 | 0 | 4 (do not block merge) |
+| **Total** | **7** | **3** | **4** |
 
 ### Prior Finding Follow-Up
 
@@ -295,17 +406,15 @@ Still intact in `src/lib/pages/contact.ts`:57-63. `bookingUrl.startsWith("https:
 
 ---
 
-### Merge Recommendation
+### Round 1 Merge Recommendation (superseded by Round 2)
 
 **CHANGES REQUESTED.** SEC-028 (High) must be fixed before merge. SEC-029 and SEC-030 (Medium) should also be addressed.
 
-**SEC-028 (High): Cross-Tenant Profile Reassignment** -- This is the most critical finding. The invite Edge Function can modify the `session_id` of users belonging to other tenants when re-inviting an existing email address. The fix requires adding a `tenant_id` check on the existing profile before updating it.
+### Round 2 Merge Recommendation (CURRENT)
 
-**SEC-029 (Medium): Rate Limiter Logic** -- The rate limiter increments the count before checking the limit, which means a rejected request still inflates the count. The fix is to check before incrementing.
+**APPROVE.** All three mandatory fixes verified. See Round 2 section at top of document.
 
-**SEC-030 (Medium): Magic Links in Response** -- Returning raw authentication tokens in the API response body is an accepted design pattern for manual distribution, but should include `Cache-Control: no-store` headers at minimum. This is an architectural concern that may be acceptable given the product requirements.
-
-**Low findings (do not block merge):**
+**Remaining Low findings (do not block merge):**
 - SEC-031 (Low): PII in server logs (informational, GDPR concern)
 - SEC-032 (Low): Client-side 50-email limit not enforced (server enforces correctly)
 - SEC-033 (Low): SpecViewer specId not UUID-validated (RLS provides protection)

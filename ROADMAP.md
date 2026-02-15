@@ -7,7 +7,7 @@
 
 | Phase | Name | Status | Priority | Duration | Notes |
 |-------|------|--------|----------|----------|-------|
-| 1 | Foundation & Auth | ⏳ Pending | P0 | — | Supabase schema, PWA shell, magic link auth |
+| 1 | Foundation & Auth | ✅ Complete | P0 | ~27 min | Supabase schema, PWA shell, magic link auth, security hardened |
 | 2 | Chatbot Onboarding | ⏳ Pending | P0 | — | Claude proxy, chat UI, question flow, AI content gen |
 | 3 | Dashboard Form Editor | ⏳ Pending | P0 | — | Tabbed form, palettes, typography, photo upload |
 | 4 | Build Pipeline & Deploy | ⏳ Pending | P0 | — | Static site gen, Netlify deploy, subdomain provisioning |
@@ -45,9 +45,12 @@ Edit/rebuild flow end-to-end. WCAG audit on generated sites. Lighthouse optimisa
 ## Agent Update — 2026-02-15
 
 **Updated by:** Conductor
-**Phase Status:** Phase plan created, entering execution loop
+**Phase Status:** Phase 1 complete, starting Phase 2
 **Changes:**
-- Decomposed SCOPING.md into 6 vertical-slice phases
-- Initialised infrastructure (worktrees, memory, status files)
+- Phase 1 (Foundation & Auth) implemented, reviewed, and merged (PR #1)
+- Security review found 6 issues (1 Critical, 2 High, 3 Low) — all resolved in 1 review-fix round
+- Database schema includes: tenants, tenant_secrets, sessions, profiles, site_specs, photos with full RLS
+- Auth: magic link flow with role assignment, protected routing, 60s cooldown
+- UI primitives: Button, Input, Card, LoadingSpinner
 
-**Next Priority:** Plan and execute Phase 1 (Foundation & Auth)
+**Next Priority:** Plan and execute Phase 2 (Chatbot Onboarding)

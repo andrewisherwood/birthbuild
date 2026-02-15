@@ -5,6 +5,7 @@ import { useDebouncedSave } from "@/hooks/useDebouncedSave";
 import { DashboardShell } from "@/components/dashboard/DashboardShell";
 import { BusinessDetailsTab } from "@/components/dashboard/BusinessDetailsTab";
 import { DesignTab } from "@/components/dashboard/DesignTab";
+import { ContentTab } from "@/components/dashboard/ContentTab";
 import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
 import type { TabKey } from "@/components/dashboard/TabNav";
 
@@ -61,7 +62,7 @@ export default function DashboardPage() {
       case "design":
         return <DesignTab siteSpec={spec} onFieldChange={debouncedUpdate} />;
       case "content":
-        return <TabPlaceholder label="Content" isPending={isPending} />;
+        return <ContentTab siteSpec={spec} onFieldChange={debouncedUpdate} />;
       case "photos":
         return <TabPlaceholder label="Photos" isPending={isPending} />;
       case "contact":

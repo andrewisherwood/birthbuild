@@ -54,3 +54,23 @@ export interface Photo {
   sort_order: number;
   created_at: string;
 }
+
+export interface SessionWithCounts extends Session {
+  student_count: number;
+  live_site_count: number;
+}
+
+export interface StudentOverview {
+  id: string;
+  email: string;
+  display_name: string | null;
+  session_id: string | null;
+  site_spec: {
+    id: string;
+    status: "draft" | "building" | "live" | "error";
+    business_name: string | null;
+    doula_name: string | null;
+    deploy_url: string | null;
+    completion_percent: number;
+  } | null;
+}

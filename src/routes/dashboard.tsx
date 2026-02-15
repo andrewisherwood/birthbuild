@@ -7,6 +7,8 @@ import { BusinessDetailsTab } from "@/components/dashboard/BusinessDetailsTab";
 import { DesignTab } from "@/components/dashboard/DesignTab";
 import { ContentTab } from "@/components/dashboard/ContentTab";
 import { PhotosTab } from "@/components/dashboard/PhotosTab";
+import { ContactTab } from "@/components/dashboard/ContactTab";
+import { SeoTab } from "@/components/dashboard/SeoTab";
 import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
 import type { TabKey } from "@/components/dashboard/TabNav";
 
@@ -67,9 +69,9 @@ export default function DashboardPage() {
       case "photos":
         return <PhotosTab siteSpec={spec} />;
       case "contact":
-        return <TabPlaceholder label="Contact & Social" isPending={isPending} />;
+        return <ContactTab siteSpec={spec} onFieldChange={debouncedUpdate} />;
       case "seo":
-        return <TabPlaceholder label="SEO" isPending={isPending} />;
+        return <SeoTab siteSpec={spec} onFieldChange={debouncedUpdate} />;
       case "preview":
         return <TabPlaceholder label="Preview & Publish" isPending={isPending} />;
     }

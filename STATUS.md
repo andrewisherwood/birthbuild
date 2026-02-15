@@ -2,8 +2,8 @@
 
 **Project:** BirthBuild
 **Started:** 2026-02-15T17:15:00Z
-**Last Updated:** 2026-02-15T18:50:00Z
-**Current Phase:** 4 of 6
+**Last Updated:** 2026-02-15T19:30:00Z
+**Current Phase:** 5 of 6
 
 ## Progress
 
@@ -12,14 +12,14 @@
 | 1 | Foundation & Auth | ✅ | ✅ | ✅ | ✅ | ✅ |
 | 2 | Chatbot Onboarding | ✅ | ✅ | ✅ | ✅ | ✅ |
 | 3 | Dashboard Form Editor | ✅ | ✅ | ✅ | ✅ | ✅ |
-| 4 | Build Pipeline & Deploy | ⏳ | — | — | — | — |
+| 4 | Build Pipeline & Deploy | ✅ | ✅ | ✅ | ✅ | ✅ |
 | 5 | Instructor Admin | ⏳ | — | — | — | — |
 | 6 | Polish & Integration Testing | ⏳ | — | — | — | — |
 
 ## Current Activity
 
-**Phase 4: Build Pipeline & Deploy**
-- Phase 3 merged, beginning phase 4 planning
+**Phase 5: Instructor Admin**
+- Phase 4 merged, beginning phase 5 planning
 - Branch: `main`
 
 ## Issues & Blockers
@@ -30,11 +30,11 @@ None
 
 | Metric | Value |
 |--------|-------|
-| Plans reviewed | 3 |
+| Plans reviewed | 4 |
 | Suggestions accepted | 0 |
 | Suggestions rejected | 0 |
-| QA rounds (total) | 6 |
-| Security findings fixed | 13 |
+| QA rounds (total) | 8 |
+| Security findings fixed | 17 |
 | Avg phase duration | ~30 min |
 
 ## Audit Trail
@@ -60,3 +60,9 @@ None
 | 2026-02-15T18:45:00Z | Dev fixed 3 mandatory security findings (SEC-012, SEC-013, SEC-014) |
 | 2026-02-15T18:48:00Z | QA round 2: PASS (6/6), Security round 2: PASS (all findings resolved) |
 | 2026-02-15T18:50:00Z | Phase 3 merged (PR #3) |
+| 2026-02-15T18:55:00Z | Phase 4 plan approved, brief handed to dev |
+| 2026-02-15T19:15:00Z | Phase 4 PR #4 opened (12 new files, 5 modified — site gen, build edge fn, preview) |
+| 2026-02-15T19:22:00Z | QA round 1: PASS (36/36), Security round 1: 9 findings (4 Medium, 5 Low) |
+| 2026-02-15T19:25:00Z | Dev fixed 4 mandatory security findings (SEC-019 through SEC-022) |
+| 2026-02-15T19:30:00Z | QA round 2: PASS (36/36), Security round 2: PASS (all Medium findings resolved) |
+| 2026-02-15T19:30:00Z | Phase 4 merged (PR #4) |

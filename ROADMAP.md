@@ -1,7 +1,7 @@
 # Project Roadmap
 
 **Project:** BirthBuild
-**Last Updated:** 2026-02-15T18:50:00Z
+**Last Updated:** 2026-02-15T19:30:00Z
 
 ## Phase Summary
 
@@ -10,7 +10,7 @@
 | 1 | Foundation & Auth | ✅ Complete | P0 | ~27 min | Supabase schema, PWA shell, magic link auth, security hardened |
 | 2 | Chatbot Onboarding | ✅ Complete | P0 | ~35 min | Claude proxy, chat UI, question flow, AI content gen, 5 security fixes |
 | 3 | Dashboard Form Editor | ✅ Complete | P0 | ~25 min | 7-tab form, palettes, typography, photo upload, 3 security fixes |
-| 4 | Build Pipeline & Deploy | ⏳ Pending | P0 | — | Static site gen, Netlify deploy, subdomain provisioning |
+| 4 | Build Pipeline & Deploy | ✅ Complete | P0 | ~35 min | Static site gen, Netlify deploy, wordmark SVG, 4 security fixes |
 | 5 | Instructor Admin | ⏳ Pending | P0 | — | Sessions, invites, student overview, usage metrics |
 | 6 | Polish & Integration Testing | ⏳ Pending | P0 | — | Edit/rebuild flow, WCAG audit, Lighthouse, error handling |
 
@@ -45,7 +45,7 @@ Edit/rebuild flow end-to-end. WCAG audit on generated sites. Lighthouse optimisa
 ## Agent Update — 2026-02-15
 
 **Updated by:** Conductor
-**Phase Status:** Phases 1–3 complete, starting Phase 4
+**Phase Status:** Phases 1–4 complete, starting Phase 5
 **Changes:**
 - Phase 1 (Foundation & Auth) implemented, reviewed, and merged (PR #1)
 - Security review found 6 issues (1 Critical, 2 High, 3 Low) — all resolved in 1 review-fix round
@@ -68,4 +68,23 @@ Edit/rebuild flow end-to-end. WCAG audit on generated sites. Lighthouse optimisa
 - SEC-012: MIME-type-based extension (not filename)
 - SEC-014: Path verification before storage delete
 
-**Next Priority:** Plan and execute Phase 4 (Build Pipeline & Deploy)
+- Phase 4 (Build Pipeline & Deploy) implemented, reviewed, and merged (PR #4)
+- 6 page generators (home, about, services, contact, testimonials, faq) with full HTML/CSS
+- Shared utilities: escapeHtml, generateHead/Nav/Footer/Css, social link validation
+- Wordmark SVG generation with 3 style variants (modern, classic, minimal)
+- Palette system: 4 presets (sage_sand, blush_neutral, deep_earth, ocean_calm) + custom colours
+- Typography config: 3 options (modern, classic, mixed) with Google Fonts
+- Site generator orchestrator: sitemap.xml, robots.txt, hex colour validation
+- Build Edge Function: JWT auth, rate limiting (5/hr), spec validation, ownership check
+- ZIP creation (pure TypeScript, Store method, CRC-32), Netlify Deploy API integration
+- Subdomain provisioning with slugification, reserved words, uniqueness check
+- useBuild hook with Supabase Realtime status tracking (draft → building → live/error)
+- PreviewTab: build button, validation warnings, building animation, device toggle preview
+- Preview route: full-page iframe with toolbar and device toggles
+- Security review found 9 issues (4 Medium, 5 Low) — 4 mandatory fixes resolved in 1 round
+- SEC-021: JSON-LD script breakout XSS prevention (.replace on <)
+- SEC-022: booking_url scheme validation (http/https only)
+- SEC-019: UUID format validation on site_spec_id
+- SEC-020: File path sanitisation in ZIP creation (traversal prevention)
+
+**Next Priority:** Plan and execute Phase 5 (Instructor Admin)

@@ -19,12 +19,18 @@ import type { ChatMessage, ChatStep, SiteSpec } from "@/types/site-spec";
 // Types
 // ---------------------------------------------------------------------------
 
+export interface PendingContent {
+  field: string;
+  context: string;
+}
+
 export interface UseChatReturn {
   messages: ChatMessage[];
   isLoading: boolean;
   error: string | null;
   currentStep: ChatStep;
   completedSteps: ChatStep[];
+  pendingContent: PendingContent | null;
   sendMessage: (content: string) => Promise<void>;
   initChat: () => void;
   clearError: () => void;
@@ -83,6 +89,7 @@ export function useChat({ siteSpec, updateSiteSpec }: UseChatParams): UseChatRet
   const [error, setError] = useState<string | null>(null);
   const [currentStep, setCurrentStep] = useState<ChatStep>("welcome");
   const [completedSteps, setCompletedSteps] = useState<ChatStep[]>([]);
+  const [pendingContent, setPendingContent] = useState<PendingContent | null>(null);
 
   // Guard against concurrent sends
   const sendingRef = useRef(false);
@@ -166,6 +173,16 @@ export function useChat({ siteSpec, updateSiteSpec }: UseChatParams): UseChatRet
           );
           if (specPartial) {
             await updateSiteSpec(specPartial);
+            // If we saved content, clear pending content state
+            setPendingContent(null);
+          }
+
+          // Track generated-but-not-confirmed content
+          if (toolCall.name === "generate_content") {
+            setPendingContent({
+              field: toolCall.input.field as string,
+              context: toolCall.input.context as string,
+            });
           }
 
           // Handle step completion markers — embed in message for history reconstruction
@@ -219,6 +236,7 @@ export function useChat({ siteSpec, updateSiteSpec }: UseChatParams): UseChatRet
     error,
     currentStep,
     completedSteps,
+    pendingContent,
     sendMessage,
     initChat,
     clearError,

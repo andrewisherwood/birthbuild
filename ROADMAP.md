@@ -1,14 +1,14 @@
 # Project Roadmap
 
 **Project:** BirthBuild
-**Last Updated:** 2026-02-15T17:15:00Z
+**Last Updated:** 2026-02-15T18:18:00Z
 
 ## Phase Summary
 
 | Phase | Name | Status | Priority | Duration | Notes |
 |-------|------|--------|----------|----------|-------|
 | 1 | Foundation & Auth | ✅ Complete | P0 | ~27 min | Supabase schema, PWA shell, magic link auth, security hardened |
-| 2 | Chatbot Onboarding | ⏳ Pending | P0 | — | Claude proxy, chat UI, question flow, AI content gen |
+| 2 | Chatbot Onboarding | ✅ Complete | P0 | ~35 min | Claude proxy, chat UI, question flow, AI content gen, 5 security fixes |
 | 3 | Dashboard Form Editor | ⏳ Pending | P0 | — | Tabbed form, palettes, typography, photo upload |
 | 4 | Build Pipeline & Deploy | ⏳ Pending | P0 | — | Static site gen, Netlify deploy, subdomain provisioning |
 | 5 | Instructor Admin | ⏳ Pending | P0 | — | Sessions, invites, student overview, usage metrics |
@@ -45,12 +45,17 @@ Edit/rebuild flow end-to-end. WCAG audit on generated sites. Lighthouse optimisa
 ## Agent Update — 2026-02-15
 
 **Updated by:** Conductor
-**Phase Status:** Phase 1 complete, starting Phase 2
+**Phase Status:** Phases 1–2 complete, starting Phase 3
 **Changes:**
 - Phase 1 (Foundation & Auth) implemented, reviewed, and merged (PR #1)
 - Security review found 6 issues (1 Critical, 2 High, 3 Low) — all resolved in 1 review-fix round
 - Database schema includes: tenants, tenant_secrets, sessions, profiles, site_specs, photos with full RLS
 - Auth: magic link flow with role assignment, protected routing, 60s cooldown
 - UI primitives: Button, Input, Card, LoadingSpinner
+- Phase 2 (Chatbot Onboarding) implemented, reviewed, and merged (PR #2)
+- Claude API proxy Edge Function with JWT validation, rate limiting, tenant API key lookup
+- 7-step chat flow: welcome → basics → style → content → photos → contact → review
+- React-based markdown renderer (no dangerouslySetInnerHTML), system prompt/tools hardcoded server-side
+- Security review found 7 issues (5 Medium, 2 Low) — 5 mandatory fixes resolved in 1 review-fix round
 
-**Next Priority:** Plan and execute Phase 2 (Chatbot Onboarding)
+**Next Priority:** Plan and execute Phase 3 (Dashboard Form Editor)

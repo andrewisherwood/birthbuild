@@ -13,3 +13,4 @@
 {"ts":"2026-02-15T20:00:00Z","event":"dev_fixes_pushed","phase":5,"round":1,"findings_fixed":3}
 {"ts":"2026-02-15T20:07:36Z","event":"phase_merged","phase":5,"pr_number":"5"}
 {"ts":"2026-02-15T20:22:27Z","event":"pr_opened","phase":6,"pr_number":"6","branch":"phase-6-polish-integration"}
+{"ts":"2026-02-15T20:27:08Z","event":"changes_requested","phase":6,"round":1,"security_findings":0,"qa_findings":2,"mandatory_fixes":2}

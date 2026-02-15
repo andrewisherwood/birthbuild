@@ -1,9 +1,9 @@
 {
-  "state": "idle",
-  "phase": "0",
+  "state": "ready",
+  "phase": 1,
   "branch": "",
   "pr_number": "",
-  "detail": "Initialized by provision-worktrees",
+  "detail": "Brief ready for phase 1",
   "errors": [],
-  "last_updated": "2026-02-15T17:14:29Z"
+  "last_updated": "2026-02-15T17:18:50Z"
 }

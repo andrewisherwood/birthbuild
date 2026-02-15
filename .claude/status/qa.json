@@ -1,9 +1,1 @@
-{
-  "state": "idle",
-  "phase": "0",
-  "branch": "",
-  "pr_number": "",
-  "detail": "Initialized by provision-worktrees",
-  "errors": [],
-  "last_updated": "2026-02-15T17:14:29Z"
-}
+{"state":"complete","phase":1,"branch":"phase-1-foundation-auth","pr_number":"1","detail":"QA review complete - PASS (22/22 checks passed, 3 advisory notes)","errors":[],"last_updated":"2026-02-15T17:36:00Z"}

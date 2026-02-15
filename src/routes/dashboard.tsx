@@ -9,13 +9,14 @@ import { ContentTab } from "@/components/dashboard/ContentTab";
 import { PhotosTab } from "@/components/dashboard/PhotosTab";
 import { ContactTab } from "@/components/dashboard/ContactTab";
 import { SeoTab } from "@/components/dashboard/SeoTab";
+import { PreviewTab } from "@/components/dashboard/PreviewTab";
 import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
 import type { TabKey } from "@/components/dashboard/TabNav";
 
 export default function DashboardPage() {
   const { user, loading: authLoading } = useAuth();
   const { siteSpec, loading: specLoading, error, updateSiteSpec } = useSiteSpec();
-  const { debouncedUpdate, isPending } = useDebouncedSave({ updateSiteSpec });
+  const { debouncedUpdate } = useDebouncedSave({ updateSiteSpec });
 
   if (authLoading || specLoading) {
     return (
@@ -73,7 +74,7 @@ export default function DashboardPage() {
       case "seo":
         return <SeoTab siteSpec={spec} onFieldChange={debouncedUpdate} />;
       case "preview":
-        return <TabPlaceholder label="Preview & Publish" isPending={isPending} />;
+        return <PreviewTab siteSpec={spec} />;
     }
   }
 
@@ -85,25 +86,5 @@ export default function DashboardPage() {
     >
       {renderTabContent}
     </DashboardShell>
-  );
-}
-
-/* Temporary placeholder — removed as real tab components are added */
-interface TabPlaceholderProps {
-  label: string;
-  isPending: boolean;
-}
-
-function TabPlaceholder({ label, isPending }: TabPlaceholderProps) {
-  return (
-    <div className="rounded-lg border border-dashed border-gray-300 bg-white p-8 text-center">
-      <h2 className="text-lg font-semibold text-gray-700">{label}</h2>
-      <p className="mt-2 text-sm text-gray-500">
-        This section will be available shortly.
-      </p>
-      {isPending && (
-        <p className="mt-2 text-xs text-gray-400">Saving changes...</p>
-      )}
-    </div>
   );
 }

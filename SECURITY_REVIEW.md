@@ -182,6 +182,20 @@ Phase 6 is a polish and accessibility phase. No new API endpoints, Edge Function
 
 ---
 
+## Round 2 Verification (2026-02-15)
+
+**Context:** Dev agent fixed 2 QA findings (heading hierarchy gaps identified by the accessibility audit).
+
+**Changes in Round 2:**
+- `src/lib/pages/about.ts`: Changed `<h3>` to `<h2>` for "Qualifications & Accreditation" section
+- `src/lib/pages/services.ts`: Changed `<h3>` to `<h2>` for service card titles
+
+**Security Assessment:** Both changes are pure HTML semantic updates with no security impact. The content escaping via `escapeHtml()` in services.ts remains in place. No changes to auth, data handling, API calls, or validation logic.
+
+**Result:** CLEAN — Round 1 APPROVE verdict confirmed for merge.
+
+---
+
 ## Previous Reviews
 
 The Phase 5, Phase 4, and Phase 3 security reviews are preserved in version control history.

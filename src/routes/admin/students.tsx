@@ -242,9 +242,9 @@ export default function AdminStudentsPage() {
         </div>
       )}
 
-      {/* Student table */}
+      {/* Student table — desktop (>=768px) */}
       {!loading && students.length > 0 && (
-        <Card className="overflow-hidden p-0">
+        <Card className="hidden overflow-hidden p-0 md:block">
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
@@ -350,6 +350,71 @@ export default function AdminStudentsPage() {
             </table>
           </div>
         </Card>
+      )}
+
+      {/* Student cards — mobile (<768px) */}
+      {!loading && students.length > 0 && (
+        <div className="space-y-3 md:hidden">
+          {students.map((student: StudentOverview) => (
+            <Card key={student.id}>
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium text-gray-900">
+                    {student.display_name ?? student.email}
+                  </p>
+                  {student.display_name && (
+                    <p className="truncate text-sm text-gray-500">
+                      {student.email}
+                    </p>
+                  )}
+                </div>
+                {student.site_spec ? (
+                  <StatusBadge status={student.site_spec.status} />
+                ) : (
+                  <span className="shrink-0 text-xs text-gray-400">
+                    Not started
+                  </span>
+                )}
+              </div>
+
+              <p className="mt-2 text-xs text-gray-500">
+                {student.session_id
+                  ? sessionNameMap.get(student.session_id) ?? "—"
+                  : "No session"}
+              </p>
+
+              {student.site_spec && (
+                <div className="mt-3">
+                  <ProgressBar percent={student.site_spec.completion_percent} />
+                </div>
+              )}
+
+              {student.site_spec && (
+                <div className="mt-3 flex gap-3">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setSelectedSpecId(student.site_spec!.id)
+                    }
+                    className="text-sm font-medium text-green-700 hover:text-green-800"
+                  >
+                    View Spec
+                  </button>
+                  {student.site_spec.deploy_url && (
+                    <a
+                      href={student.site_spec.deploy_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-sm font-medium text-green-700 hover:text-green-800"
+                    >
+                      View Site
+                    </a>
+                  )}
+                </div>
+              )}
+            </Card>
+          ))}
+        </div>
       )}
 
       {/* Spec viewer slide-over panel */}

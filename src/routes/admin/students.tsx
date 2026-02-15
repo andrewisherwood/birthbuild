@@ -1,6 +1,7 @@
 import { useState, useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
 import { AdminShell } from "@/components/admin/AdminShell";
+import { SpecViewer } from "@/components/admin/SpecViewer";
 import { useStudents } from "@/hooks/useStudents";
 import { useSessions } from "@/hooks/useSessions";
 import { inviteStudents } from "@/lib/invite";
@@ -351,27 +352,12 @@ export default function AdminStudentsPage() {
         </Card>
       )}
 
-      {/* Spec viewer placeholder — will be replaced in Loop 5 */}
+      {/* Spec viewer slide-over panel */}
       {selectedSpecId && (
-        <div className="fixed inset-y-0 right-0 z-50 w-full max-w-lg overflow-y-auto border-l border-gray-200 bg-white shadow-xl">
-          <div className="p-6">
-            <div className="flex items-center justify-between">
-              <h3 className="text-lg font-semibold text-gray-900">
-                Site Specification
-              </h3>
-              <button
-                type="button"
-                onClick={() => setSelectedSpecId(null)}
-                className="text-sm font-medium text-gray-500 hover:text-gray-700"
-              >
-                Close
-              </button>
-            </div>
-            <p className="mt-4 text-sm text-gray-500">
-              Spec ID: {selectedSpecId}
-            </p>
-          </div>
-        </div>
+        <SpecViewer
+          specId={selectedSpecId}
+          onClose={() => setSelectedSpecId(null)}
+        />
       )}
 
       {/* Invite modal */}

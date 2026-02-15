@@ -1,7 +1,7 @@
 # Project Roadmap
 
 **Project:** BirthBuild
-**Last Updated:** 2026-02-15T20:45:00Z
+**Last Updated:** 2026-02-15T21:45:00Z
 
 ## Phase Summary
 
@@ -12,7 +12,7 @@
 | 3 | Dashboard Form Editor | ✅ Complete | P0 | ~25 min | 7-tab form, palettes, typography, photo upload, 3 security fixes |
 | 4 | Build Pipeline & Deploy | ✅ Complete | P0 | ~35 min | Static site gen, Netlify deploy, wordmark SVG, 4 security fixes |
 | 5 | Instructor Admin | ✅ Complete | P0 | ~30 min | Admin shell, sessions CRUD, invite edge fn, student table, spec viewer, usage metrics, 3 security fixes |
-| 6 | Polish & Integration Testing | ⏳ Pending | P0 | — | Edit/rebuild flow, WCAG audit, Lighthouse, error handling |
+| 6 | Polish & Integration Testing | ✅ Complete | P0 | ~25 min | Error boundary, mobile responsive tabs/tables, WCAG accessibility, build validation, stale rebuild, 2 QA fixes |
 
 ## Detailed Phases
 
@@ -45,7 +45,7 @@ Edit/rebuild flow end-to-end. WCAG audit on generated sites. Lighthouse optimisa
 ## Agent Update — 2026-02-15
 
 **Updated by:** Conductor
-**Phase Status:** Phases 1–5 complete, starting Phase 6
+**Phase Status:** All 6 phases complete — project delivered
 **Changes:**
 - Phase 1 (Foundation & Auth) implemented, reviewed, and merged (PR #1)
 - Security review found 6 issues (1 Critical, 2 High, 3 Low) — all resolved in 1 review-fix round
@@ -104,4 +104,16 @@ Edit/rebuild flow end-to-end. WCAG audit on generated sites. Lighthouse optimisa
 - SEC-029: Rate limiter check-before-increment logic
 - SEC-030: Cache-Control no-store header on invite response
 
-**Next Priority:** Plan and execute Phase 6 (Polish & Integration Testing)
+- Phase 6 (Polish & Integration Testing) implemented, reviewed, and merged (PR #6)
+- Global ErrorBoundary component wrapping all routes (class component, generic fallback UI)
+- Mobile dashboard tab navigation: horizontal scroll, fade indicators, auto-scroll active tab, 44px touch targets
+- Mobile admin student table: card layout below 768px breakpoint
+- Generated site accessibility: heading hierarchy fixes (h3→h2 in contact, services, about), focus-visible outlines
+- WCAG contrast ratio utility: getContrastRatio() and meetsContrastAA() in palettes.ts
+- Build validation: photo alt text warnings, contrast ratio warnings (non-blocking)
+- Stale build detection: isStale flag in useSiteSpec, rebuild banner in PreviewTab
+- Responsive polish: session button w-full on mobile, 404 page with Go Home link
+- QA found 2 heading hierarchy gaps in services.ts and about.ts — fixed in 1 round
+- Security: CLEAN (0 findings) — all prior findings verified with no regressions
+
+**Project Status:** All 6 phases complete. BirthBuild MVP delivered.

@@ -64,8 +64,12 @@ function isRateLimited(userId: string, emailCount: number): boolean {
     return false;
   }
 
+  if (entry.count + emailCount > RATE_LIMIT_MAX) {
+    return true;
+  }
+
   entry.count += emailCount;
-  return entry.count > RATE_LIMIT_MAX;
+  return false;
 }
 
 // ---------------------------------------------------------------------------
@@ -338,14 +342,24 @@ Deno.serve(async (req: Request): Promise<Response> => {
       // Check if user already exists by looking up profiles
       const { data: existingProfile } = await serviceClient
         .from("profiles")
-        .select("id")
+        .select("id, tenant_id")
         .eq("email", email)
         .maybeSingle();
 
       let userId: string;
 
       if (existingProfile) {
-        // User exists — update their session_id if needed
+        // User exists — verify they belong to the caller's tenant
+        if (existingProfile.tenant_id !== tenantId) {
+          results.push({
+            email,
+            success: false,
+            error: "This email belongs to a different organisation.",
+          });
+          continue;
+        }
+
+        // Same tenant — update their session_id if needed
         userId = existingProfile.id as string;
 
         await serviceClient
@@ -445,6 +459,6 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
   return new Response(JSON.stringify({ results }), {
     status: 200,
-    headers: { ...cors, "Content-Type": "application/json" },
+    headers: { ...cors, "Content-Type": "application/json", "Cache-Control": "no-store" },
   });
 });

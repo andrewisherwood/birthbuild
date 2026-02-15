@@ -6,6 +6,7 @@ import { DashboardShell } from "@/components/dashboard/DashboardShell";
 import { BusinessDetailsTab } from "@/components/dashboard/BusinessDetailsTab";
 import { DesignTab } from "@/components/dashboard/DesignTab";
 import { ContentTab } from "@/components/dashboard/ContentTab";
+import { PhotosTab } from "@/components/dashboard/PhotosTab";
 import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
 import type { TabKey } from "@/components/dashboard/TabNav";
 
@@ -64,7 +65,7 @@ export default function DashboardPage() {
       case "content":
         return <ContentTab siteSpec={spec} onFieldChange={debouncedUpdate} />;
       case "photos":
-        return <TabPlaceholder label="Photos" isPending={isPending} />;
+        return <PhotosTab siteSpec={spec} />;
       case "contact":
         return <TabPlaceholder label="Contact & Social" isPending={isPending} />;
       case "seo":

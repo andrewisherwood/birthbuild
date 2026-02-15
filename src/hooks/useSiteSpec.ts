@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/hooks/useAuth";
 import type { SiteSpec } from "@/types/site-spec";
@@ -7,6 +7,7 @@ interface UseSiteSpecReturn {
   siteSpec: SiteSpec | null;
   loading: boolean;
   error: string | null;
+  isStale: boolean;
   updateSiteSpec: (partial: Partial<SiteSpec>) => Promise<void>;
   createSiteSpec: () => Promise<SiteSpec | null>;
 }
@@ -16,6 +17,10 @@ export function useSiteSpec(): UseSiteSpecReturn {
   const [siteSpec, setSiteSpec] = useState<SiteSpec | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Track the updated_at value when the spec last transitioned to "live" or "building".
+  // If the spec is later edited (updated_at advances), the build is stale.
+  const lastBuildUpdatedAtRef = useRef<string | null>(null);
 
   // Fetch the current user's site spec on mount
   useEffect(() => {
@@ -56,6 +61,30 @@ export function useSiteSpec(): UseSiteSpecReturn {
       mounted = false;
     };
   }, [user]);
+
+  // Record the updated_at timestamp when a build starts (status -> building)
+  // or when the site first loads as "live". This lets us detect edits after build.
+  useEffect(() => {
+    if (!siteSpec) return;
+    if (siteSpec.status === "building" || siteSpec.status === "live") {
+      // Only set the ref if it hasn't been set, or if transitioning to building
+      // (which means a new build was just triggered).
+      if (
+        siteSpec.status === "building" ||
+        lastBuildUpdatedAtRef.current === null
+      ) {
+        lastBuildUpdatedAtRef.current = siteSpec.updated_at;
+      }
+    }
+  }, [siteSpec?.status, siteSpec?.updated_at, siteSpec]);
+
+  // Detect stale build: the spec has been edited (updated_at is newer) since
+  // the last build was started.
+  const isStale =
+    siteSpec !== null &&
+    siteSpec.status === "live" &&
+    lastBuildUpdatedAtRef.current !== null &&
+    siteSpec.updated_at > lastBuildUpdatedAtRef.current;
 
   const updateSiteSpec = useCallback(
     async (partial: Partial<SiteSpec>) => {
@@ -127,6 +156,7 @@ export function useSiteSpec(): UseSiteSpecReturn {
     siteSpec,
     loading,
     error,
+    isStale,
     updateSiteSpec,
     createSiteSpec,
   };

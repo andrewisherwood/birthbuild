@@ -1,2 +1,6 @@
 {"ts":"2026-02-15T17:14:04Z","event":"onboard_started","prerequisites":"validated"}
 {"ts":"2026-02-15T17:14:55Z","event":"infrastructure_provisioned","worktrees":["BirthBuild-dev","BirthBuild-qa","BirthBuild-audit"]}
+{"ts":"2026-02-15T17:43:35Z","event":"phase_merged","phase":1,"pr_number":"1"}
+{"ts":"2026-02-15T18:07:50Z","event":"changes_requested","phase":2,"round":1,"security_findings":7,"qa_findings":0}
+{"ts":"2026-02-15T18:12:09Z","event":"dev_fixes_pushed","phase":2,"round":1,"findings_fixed":5}
+{"ts":"2026-02-15T18:18:00Z","event":"phase_merged","phase":2,"pr_number":"2"}

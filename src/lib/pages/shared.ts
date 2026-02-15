@@ -235,6 +235,12 @@ export function generateCss(
     a { color: var(--colour-primary); text-decoration: underline; }
     a:hover { opacity: 0.85; }
 
+    /* Focus-visible styles for keyboard navigation (WCAG 2.4.7) */
+    *:focus-visible {
+      outline: 2px solid var(--colour-primary);
+      outline-offset: 2px;
+    }
+
     img { max-width: 100%; height: auto; display: block; }
 
     /* Skip link */

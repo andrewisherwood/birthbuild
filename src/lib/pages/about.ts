@@ -66,7 +66,7 @@ export function generateAboutPage(
   const qualificationsHtml =
     qualifications.length > 0
       ? `<div class="qualifications">
-          <h3>Qualifications &amp; Accreditation</h3>
+          <h2>Qualifications &amp; Accreditation</h2>
           <ul>
             ${qualifications.map((q) => `<li>${q}</li>`).join("\n            ")}
           </ul>

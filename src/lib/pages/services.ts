@@ -28,7 +28,7 @@ export function generateServicesPage(
     .map(
       (svc) =>
         `<div class="card">
-        <h3>${escapeHtml(svc.title)}</h3>
+        <h2>${escapeHtml(svc.title)}</h2>
         <p>${escapeHtml(svc.description)}</p>
         <span class="price">${escapeHtml(svc.price)}</span>
         ${hasContact ? `<a href="contact.html" class="btn btn--outline">Enquire</a>` : ""}

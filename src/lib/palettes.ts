@@ -85,6 +85,53 @@ export function getPaletteColours(
 }
 
 // ---------------------------------------------------------------------------
+// Contrast ratio utilities (WCAG 2.1)
+// ---------------------------------------------------------------------------
+
+/**
+ * Convert a hex colour string to its relative luminance.
+ * Uses the WCAG 2.1 formula: https://www.w3.org/TR/WCAG21/#dfn-relative-luminance
+ */
+function hexToRgbChannel(hex: string): [number, number, number] {
+  const cleaned = hex.replace("#", "");
+  const r = parseInt(cleaned.substring(0, 2), 16) / 255;
+  const g = parseInt(cleaned.substring(2, 4), 16) / 255;
+  const b = parseInt(cleaned.substring(4, 6), 16) / 255;
+  return [r, g, b];
+}
+
+function linearise(channel: number): number {
+  return channel <= 0.04045
+    ? channel / 12.92
+    : Math.pow((channel + 0.055) / 1.055, 2.4);
+}
+
+function relativeLuminance(hex: string): number {
+  const [r, g, b] = hexToRgbChannel(hex);
+  return 0.2126 * linearise(r) + 0.7152 * linearise(g) + 0.0722 * linearise(b);
+}
+
+/**
+ * Calculate the WCAG 2.1 contrast ratio between two hex colours.
+ * Returns a value between 1 and 21.
+ */
+export function getContrastRatio(hex1: string, hex2: string): number {
+  const l1 = relativeLuminance(hex1);
+  const l2 = relativeLuminance(hex2);
+  const lighter = Math.max(l1, l2);
+  const darker = Math.min(l1, l2);
+  return (lighter + 0.05) / (darker + 0.05);
+}
+
+/**
+ * Check whether two colours meet WCAG AA contrast requirements
+ * for normal text (ratio >= 4.5).
+ */
+export function meetsContrastAA(foreground: string, background: string): boolean {
+  return getContrastRatio(foreground, background) >= 4.5;
+}
+
+// ---------------------------------------------------------------------------
 // Typography definitions
 // ---------------------------------------------------------------------------
 

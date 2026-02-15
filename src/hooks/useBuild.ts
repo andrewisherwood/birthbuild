@@ -11,6 +11,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { supabase } from "@/lib/supabase";
 import { generateSite } from "@/lib/site-generator";
+import { getPaletteColours, meetsContrastAA } from "@/lib/palettes";
 import type { SiteSpec, SiteSpecStatus } from "@/types/site-spec";
 import type { PhotoData } from "@/lib/pages/shared";
 
@@ -29,6 +30,7 @@ interface UseBuildReturn {
   buildError: string | null;
   triggerBuild: () => Promise<void>;
   lastBuildStatus: BuildStatus | null;
+  validationWarnings: string[];
 }
 
 // ---------------------------------------------------------------------------
@@ -52,6 +54,7 @@ function validateRequiredFields(spec: SiteSpec): string[] {
 export function useBuild(siteSpec: SiteSpec | null): UseBuildReturn {
   const [building, setBuilding] = useState(false);
   const [buildError, setBuildError] = useState<string | null>(null);
+  const [validationWarnings, setValidationWarnings] = useState<string[]>([]);
   const [lastBuildStatus, setLastBuildStatus] = useState<BuildStatus | null>(
     siteSpec
       ? {
@@ -135,6 +138,9 @@ export function useBuild(siteSpec: SiteSpec | null): UseBuildReturn {
 
     setBuildError(null);
     setBuilding(true);
+    setValidationWarnings([]);
+
+    const warnings: string[] = [];
 
     try {
       // 2. Fetch photos from Supabase
@@ -158,6 +164,24 @@ export function useBuild(siteSpec: SiteSpec | null): UseBuildReturn {
           altText: (row.alt_text as string) ?? "",
         };
       });
+
+      // 2a. Check for missing alt text (non-blocking warning)
+      const missingAlt = photos.filter((p) => !p.altText || p.altText.trim() === "");
+      if (missingAlt.length > 0) {
+        warnings.push(
+          `${missingAlt.length} photo${missingAlt.length === 1 ? "" : "s"} missing alt text. Adding descriptive alt text improves accessibility.`,
+        );
+      }
+
+      // 2b. Check colour contrast (non-blocking warning)
+      const colours = getPaletteColours(spec.palette, spec.custom_colours);
+      if (!meetsContrastAA(colours.text, colours.background)) {
+        warnings.push(
+          "Text colour may not meet WCAG AA contrast requirements against the background. Consider adjusting your colour palette.",
+        );
+      }
+
+      setValidationWarnings(warnings);
 
       // 3. Generate site files
       const site = generateSite(spec, photos);
@@ -211,5 +235,6 @@ export function useBuild(siteSpec: SiteSpec | null): UseBuildReturn {
     buildError,
     triggerBuild,
     lastBuildStatus,
+    validationWarnings,
   };
 }

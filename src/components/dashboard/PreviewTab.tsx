@@ -12,6 +12,7 @@ import type { SiteSpec, SiteSpecStatus } from "@/types/site-spec";
 interface PreviewTabProps {
   siteSpec: SiteSpec;
   onFieldChange: (partial: Partial<SiteSpec>) => void;
+  isStale?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -159,9 +160,9 @@ const DEVICE_LABELS: Record<DeviceSize, string> = {
 // Component
 // ---------------------------------------------------------------------------
 
-export function PreviewTab({ siteSpec, onFieldChange }: PreviewTabProps) {
+export function PreviewTab({ siteSpec, onFieldChange, isStale = false }: PreviewTabProps) {
   const summary = buildSummary(siteSpec);
-  const { building, buildError, triggerBuild, lastBuildStatus } = useBuild(siteSpec);
+  const { building, buildError, triggerBuild, lastBuildStatus, validationWarnings } = useBuild(siteSpec);
   const [deviceSize, setDeviceSize] = useState<DeviceSize>("desktop");
 
   const currentStatus = lastBuildStatus?.status ?? siteSpec.status;
@@ -263,6 +264,33 @@ export function PreviewTab({ siteSpec, onFieldChange }: PreviewTabProps) {
                 {deployUrl}
               </a>
             </p>
+          </div>
+        )}
+
+        {/* Stale build banner */}
+        {isLive && isStale && !building && (
+          <div
+            className="mt-4 rounded-md border border-yellow-200 bg-yellow-50 p-3"
+            role="status"
+          >
+            <p className="text-sm text-yellow-800">
+              You&rsquo;ve made changes since your last build. Rebuild to update your live site.
+            </p>
+          </div>
+        )}
+
+        {/* Build validation warnings (non-blocking) */}
+        {validationWarnings.length > 0 && !building && (
+          <div
+            className="mt-4 rounded-md border border-yellow-200 bg-yellow-50 p-3"
+            role="status"
+          >
+            <p className="text-sm font-medium text-yellow-800">Warnings:</p>
+            <ul className="mt-1 list-inside list-disc text-sm text-yellow-700">
+              {validationWarnings.map((warning) => (
+                <li key={warning}>{warning}</li>
+              ))}
+            </ul>
           </div>
         )}
 

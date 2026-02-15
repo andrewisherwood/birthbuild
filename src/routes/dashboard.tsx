@@ -15,7 +15,7 @@ import type { TabKey } from "@/components/dashboard/TabNav";
 
 export default function DashboardPage() {
   const { user, loading: authLoading } = useAuth();
-  const { siteSpec, loading: specLoading, error, updateSiteSpec } = useSiteSpec();
+  const { siteSpec, loading: specLoading, error, isStale, updateSiteSpec } = useSiteSpec();
   const { debouncedUpdate } = useDebouncedSave({ updateSiteSpec });
 
   if (authLoading || specLoading) {
@@ -74,7 +74,7 @@ export default function DashboardPage() {
       case "seo":
         return <SeoTab siteSpec={spec} onFieldChange={debouncedUpdate} />;
       case "preview":
-        return <PreviewTab siteSpec={spec} onFieldChange={debouncedUpdate} />;
+        return <PreviewTab siteSpec={spec} onFieldChange={debouncedUpdate} isStale={isStale} />;
     }
   }
 

@@ -54,6 +54,7 @@ export default function AdminSessionsPage() {
         <Button
           variant="primary"
           size="sm"
+          className="w-full sm:w-auto"
           onClick={() => setShowCreateForm(true)}
         >
           Create Session

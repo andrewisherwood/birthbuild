@@ -1,1 +1,1 @@
-{"state":"complete","phase":2,"branch":"phase-2-chatbot-onboarding","pr_number":"2","detail":"Security review complete — 7 findings (0 critical, 0 high, 5 medium, 2 low). Priority: hardcode system prompt and tools in Edge Function (SEC-009/SEC-010).","errors":[],"last_updated":"2026-02-15T19:00:00Z"}
+{"state":"complete","phase":2,"branch":"phase-2-chatbot-onboarding","pr_number":"2","detail":"Round 2 CLEAN — all 5 medium fixes verified (SEC-007 through SEC-011), 0 new findings, 0 regressions. Recommend merge.","errors":[],"last_updated":"2026-02-15T18:15:00Z"}

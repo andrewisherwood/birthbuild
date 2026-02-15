@@ -11,9 +11,16 @@ export interface Tenant {
   id: string;
   name: string;
   owner_id: string | null;
-  claude_api_key: string | null;
   plan: string;
   settings: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+}
+
+// SEC-003: API keys stored in a separate owner-only table
+export interface TenantSecret {
+  tenant_id: string;
+  claude_api_key: string | null;
   created_at: string;
   updated_at: string;
 }

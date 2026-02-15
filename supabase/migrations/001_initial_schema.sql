@@ -9,7 +9,6 @@ create table public.tenants (
   id            uuid primary key default gen_random_uuid(),
   name          text not null,
   owner_id      uuid references auth.users(id),
-  claude_api_key text,
   plan          text not null default 'free',
   settings      jsonb not null default '{}',
   created_at    timestamptz not null default now(),
@@ -24,13 +23,36 @@ create policy "tenant_owner_all" on public.tenants
   using (auth.uid() = owner_id)
   with check (auth.uid() = owner_id);
 
--- Profiles in a tenant can read the tenant row
+-- Members of a tenant can read tenant info (excludes secrets)
 create policy "tenant_members_read" on public.tenants
   for select
   using (
     id in (
       select tenant_id from public.profiles where id = auth.uid()
     )
+  );
+
+-- --------------------------------------------------------
+-- 1b. Tenant Secrets (owner-only access to sensitive keys)
+-- SEC-003: claude_api_key moved here from tenants table
+-- --------------------------------------------------------
+create table public.tenant_secrets (
+  tenant_id     uuid primary key references public.tenants(id) on delete cascade,
+  claude_api_key text,
+  created_at    timestamptz not null default now(),
+  updated_at    timestamptz not null default now()
+);
+
+alter table public.tenant_secrets enable row level security;
+
+-- Only the tenant owner can access secrets
+create policy "owner_only" on public.tenant_secrets
+  for all
+  using (
+    tenant_id in (select id from public.tenants where owner_id = auth.uid())
+  )
+  with check (
+    tenant_id in (select id from public.tenants where owner_id = auth.uid())
   );
 
 -- --------------------------------------------------------
@@ -44,6 +66,9 @@ create table public.sessions (
   created_at    timestamptz not null default now(),
   updated_at    timestamptz not null default now()
 );
+
+-- NOTE-002: Constrain session status to valid values
+alter table public.sessions add constraint valid_session_status check (status in ('active', 'archived', 'completed'));
 
 alter table public.sessions enable row level security;
 
@@ -84,13 +109,43 @@ create table public.profiles (
   updated_at    timestamptz not null default now()
 );
 
+-- SEC-001: Constrain role to valid values
+alter table public.profiles add constraint valid_role check (role in ('student', 'instructor', 'admin'));
+
 alter table public.profiles enable row level security;
 
--- Users can read and update their own profile
-create policy "profiles_own_all" on public.profiles
-  for all
+-- SEC-001/SEC-002: Separate SELECT and UPDATE policies (no INSERT/DELETE via RLS for own profile)
+-- Users can read their own profile
+create policy "profiles_own_select" on public.profiles
+  for select
+  using (auth.uid() = id);
+
+-- Users can update their own profile (trigger enforces immutable fields)
+create policy "profiles_own_update" on public.profiles
+  for update
   using (auth.uid() = id)
   with check (auth.uid() = id);
+
+-- SEC-001/SEC-002: Prevent users from modifying role, tenant_id, or session_id
+create or replace function public.prevent_profile_field_changes()
+returns trigger as $$
+begin
+  if new.role is distinct from old.role then
+    raise exception 'Cannot modify role field';
+  end if;
+  if new.tenant_id is distinct from old.tenant_id then
+    raise exception 'Cannot modify tenant_id field';
+  end if;
+  if new.session_id is distinct from old.session_id then
+    raise exception 'Cannot modify session_id field';
+  end if;
+  return new;
+end;
+$$ language plpgsql security definer;
+
+create trigger enforce_profile_immutable_fields
+  before update on public.profiles
+  for each row execute function public.prevent_profile_field_changes();
 
 -- Instructors can read profiles in their tenant
 create policy "profiles_instructor_read" on public.profiles
@@ -109,7 +164,8 @@ create table public.site_specs (
   user_id         uuid not null references auth.users(id) on delete cascade,
   tenant_id       uuid references public.tenants(id),
   session_id      uuid references public.sessions(id),
-  status          text not null default 'draft',
+  status          text not null default 'draft'
+    constraint valid_site_spec_status check (status in ('draft', 'building', 'live', 'error')),
 
   -- Business info
   business_name   text,
@@ -248,4 +304,8 @@ create trigger profiles_updated_at
 
 create trigger site_specs_updated_at
   before update on public.site_specs
+  for each row execute function public.handle_updated_at();
+
+create trigger tenant_secrets_updated_at
+  before update on public.tenant_secrets
   for each row execute function public.handle_updated_at();

@@ -28,8 +28,8 @@ async function fetchProfile(userId: string): Promise<Profile | null> {
     .single();
 
   if (error) {
-    // Profile may not exist yet (first-time user before profile creation)
-    console.warn("Could not fetch profile:", error.message);
+    // Profile may not exist yet (first-time user before profile creation).
+    // SEC-004: Do not log Supabase error details to the console.
     return null;
   }
 
@@ -105,7 +105,8 @@ export function useAuth(): UseAuthReturn {
       });
 
       if (error) {
-        return { error: error.message };
+        // SEC-004: Return a generic error message instead of leaking Supabase error details.
+        return { error: "Unable to send magic link. Please try again." };
       }
 
       return { error: null };

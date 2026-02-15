@@ -1,1 +1,1 @@
-{"state":"complete","phase":5,"branch":"qa/phase-5-review","pr_number":"5","detail":"Round 2 PASS 8/8 - security fixes SEC-028 SEC-029 SEC-030 verified, build clean, no regressions","errors":[],"last_updated":"2026-02-15T21:45:00Z"}
+{"state":"complete","phase":6,"branch":"qa/phase-6-review","pr_number":"6","detail":"Phase 6 QA complete: 11/13 passed, 2 failed (heading hierarchy gaps in services.ts and about.ts)","errors":["TC-007: services.ts and about.ts have h1->h3 heading gaps (skipping h2)"],"last_updated":"2026-02-15T21:10:00Z"}

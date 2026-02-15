@@ -6,6 +6,13 @@ import type { Photo } from "@/types/database";
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp"];
 const MAX_SIZE_BYTES = 5 * 1024 * 1024; // 5MB
 
+// SEC-012: Derive file extension from validated MIME type, not user-controlled filename
+const MIME_TO_EXT: Record<string, string> = {
+  "image/jpeg": "jpg",
+  "image/png": "png",
+  "image/webp": "webp",
+};
+
 interface UsePhotoUploadReturn {
   photos: Photo[];
   loading: boolean;
@@ -91,7 +98,13 @@ export function usePhotoUpload(siteSpecId: string | null): UsePhotoUploadReturn 
       setUploading(true);
       setError(null);
 
-      const ext = file.name.split(".").pop() ?? "jpg";
+      // SEC-012: Derive extension from MIME type, reject unknown types
+      const ext = MIME_TO_EXT[file.type];
+      if (!ext) {
+        setError("Unsupported file type.");
+        setUploading(false);
+        return null;
+      }
       const storagePath = `photos/${user.id}/${purpose}-${Date.now()}.${ext}`;
 
       // Upload to Supabase Storage
@@ -143,6 +156,12 @@ export function usePhotoUpload(siteSpecId: string | null): UsePhotoUploadReturn 
     async (photoId: string, storagePath: string) => {
       setError(null);
 
+      // SEC-014: Verify the storage path belongs to the current user before deleting
+      if (!user || !storagePath.startsWith(`photos/${user.id}/`)) {
+        setError("Invalid storage path.");
+        return;
+      }
+
       const { error: deleteError } = await supabase
         .from("photos")
         .delete()
@@ -159,7 +178,7 @@ export function usePhotoUpload(siteSpecId: string | null): UsePhotoUploadReturn 
 
       setPhotos((prev) => prev.filter((p) => p.id !== photoId));
     },
-    [],
+    [user],
   );
 
   const updatePhotoAltText = useCallback(

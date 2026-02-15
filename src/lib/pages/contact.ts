@@ -79,7 +79,7 @@ export function generateContactPage(
   const socialHtml =
     validLinks.length > 0
       ? `<div class="mt-2">
-          <h3>Find Me Online</h3>
+          <h2>Find Me Online</h2>
           <div class="footer-social" style="justify-content: flex-start; margin-top: 0.75rem;">
             ${validLinks
               .map(

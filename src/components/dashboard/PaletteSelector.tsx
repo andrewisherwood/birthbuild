@@ -1,4 +1,5 @@
 import type { PaletteOption, CustomColours } from "@/types/site-spec";
+import { PALETTES } from "@/lib/palettes";
 import { CustomColourPicker } from "@/components/dashboard/CustomColourPicker";
 
 interface PaletteSelectorProps {
@@ -7,59 +8,6 @@ interface PaletteSelectorProps {
   onChange: (palette: PaletteOption) => void;
   onCustomChange: (colours: CustomColours) => void;
 }
-
-interface PaletteDefinition {
-  key: PaletteOption;
-  label: string;
-  colours: CustomColours;
-}
-
-const PALETTES: PaletteDefinition[] = [
-  {
-    key: "sage_sand",
-    label: "Sage & Sand",
-    colours: {
-      background: "#f5f0e8",
-      primary: "#5f7161",
-      accent: "#a8b5a0",
-      text: "#2d2d2d",
-      cta: "#5f7161",
-    },
-  },
-  {
-    key: "blush_neutral",
-    label: "Blush & Neutral",
-    colours: {
-      background: "#fdf6f0",
-      primary: "#c9928e",
-      accent: "#e8cfc4",
-      text: "#3d3d3d",
-      cta: "#c9928e",
-    },
-  },
-  {
-    key: "deep_earth",
-    label: "Deep Earth",
-    colours: {
-      background: "#f0ebe3",
-      primary: "#6b4c3b",
-      accent: "#a67c52",
-      text: "#2b2b2b",
-      cta: "#6b4c3b",
-    },
-  },
-  {
-    key: "ocean_calm",
-    label: "Ocean Calm",
-    colours: {
-      background: "#f0f4f5",
-      primary: "#3d6b7e",
-      accent: "#7ca5b8",
-      text: "#2c3e50",
-      cta: "#3d6b7e",
-    },
-  },
-];
 
 function ColourSwatches({ colours }: { colours: CustomColours }) {
   const swatchOrder: (keyof CustomColours)[] = [

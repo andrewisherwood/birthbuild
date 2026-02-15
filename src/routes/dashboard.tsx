@@ -74,7 +74,7 @@ export default function DashboardPage() {
       case "seo":
         return <SeoTab siteSpec={spec} onFieldChange={debouncedUpdate} />;
       case "preview":
-        return <PreviewTab siteSpec={spec} />;
+        return <PreviewTab siteSpec={spec} onFieldChange={debouncedUpdate} />;
     }
   }
 

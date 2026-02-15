@@ -2,6 +2,11 @@
   command = "npm run build"
   publish = "dist"
 
+[build.environment]
+  # Anon key and URL are intentionally public (RLS protects data).
+  # NODE_ENV "production" and APP_URL are non-secret.
+  SECRETS_SCAN_OMIT_KEYS = "NODE_ENV,SUPABASE_ANON_KEY,VITE_SUPABASE_ANON_KEY,VITE_SUPABASE_URL,APP_URL"
+
 [[redirects]]
   from = "/*"
   to = "/index.html"

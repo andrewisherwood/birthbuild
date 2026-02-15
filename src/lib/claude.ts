@@ -1,6 +1,9 @@
 /**
  * Claude API client — calls the chat Edge Function proxy.
  * The API key never reaches the browser.
+ *
+ * SEC-009/SEC-010: The system prompt and tool definitions are now hardcoded
+ * in the Edge Function. The client only sends messages.
  */
 
 import { supabase } from "@/lib/supabase";
@@ -46,20 +49,14 @@ export interface ClaudeToolDefinition {
 
 interface SendChatMessageParams {
   messages: Array<{ role: string; content: string }>;
-  systemPrompt: string;
-  tools?: ClaudeToolDefinition[];
 }
 
 export async function sendChatMessage({
   messages,
-  systemPrompt,
-  tools,
 }: SendChatMessageParams): Promise<ClaudeResponse> {
   const { data, error } = await supabase.functions.invoke("chat", {
     body: {
       messages,
-      system: systemPrompt,
-      tools: tools ?? [],
     },
   });
 

@@ -11,8 +11,8 @@ import {
   type ClaudeBlock,
   type ClaudeToolUseBlock,
 } from "@/lib/claude";
-import { SYSTEM_PROMPT, WELCOME_MESSAGE } from "@/lib/chat-prompts";
-import { CHAT_TOOLS, mapToolCallToSpecUpdate } from "@/lib/chat-tools";
+import { WELCOME_MESSAGE } from "@/lib/chat-prompts";
+import { mapToolCallToSpecUpdate } from "@/lib/chat-tools";
 import type { ChatMessage, ChatStep, SiteSpec } from "@/types/site-spec";
 
 // ---------------------------------------------------------------------------
@@ -152,8 +152,6 @@ export function useChat({ siteSpec, updateSiteSpec }: UseChatParams): UseChatRet
 
         const response = await sendChatMessage({
           messages: apiMessages,
-          systemPrompt: SYSTEM_PROMPT,
-          tools: CHAT_TOOLS,
         });
 
         // Extract text content

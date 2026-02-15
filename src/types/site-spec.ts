@@ -42,6 +42,16 @@ export type PaletteOption =
   | "custom";
 export type TypographyOption = "modern" | "classic" | "mixed";
 
+export type ChatStep =
+  | "welcome"
+  | "basics"
+  | "style"
+  | "content"
+  | "photos"
+  | "contact"
+  | "review"
+  | "complete";
+
 export interface ChatMessage {
   role: "user" | "assistant";
   content: string;

@@ -1,0 +1,2 @@
+{"ts":"2026-02-15T17:14:04Z","event":"onboard_started","prerequisites":"validated"}
+{"ts":"2026-02-15T17:14:55Z","event":"infrastructure_provisioned","worktrees":["BirthBuild-dev","BirthBuild-qa","BirthBuild-audit"]}

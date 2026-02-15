@@ -4,6 +4,7 @@ import { useSiteSpec } from "@/hooks/useSiteSpec";
 import { useDebouncedSave } from "@/hooks/useDebouncedSave";
 import { DashboardShell } from "@/components/dashboard/DashboardShell";
 import { BusinessDetailsTab } from "@/components/dashboard/BusinessDetailsTab";
+import { DesignTab } from "@/components/dashboard/DesignTab";
 import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
 import type { TabKey } from "@/components/dashboard/TabNav";
 
@@ -58,7 +59,7 @@ export default function DashboardPage() {
       case "business":
         return <BusinessDetailsTab siteSpec={spec} onFieldChange={debouncedUpdate} />;
       case "design":
-        return <TabPlaceholder label="Design" isPending={isPending} />;
+        return <DesignTab siteSpec={spec} onFieldChange={debouncedUpdate} />;
       case "content":
         return <TabPlaceholder label="Content" isPending={isPending} />;
       case "photos":

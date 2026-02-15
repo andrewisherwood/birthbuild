@@ -4,39 +4,106 @@
 **Branch:** phase-4-build-pipeline-deploy
 **PR:** #4
 **Reviewer:** Security Agent
-**Result:** ISSUES FOUND (9 findings)
+**Result:** CLEAN (0 open Medium+ findings)
 
 ---
 
-## Findings
+## Round 2 Review (2026-02-15)
+
+The Dev Agent addressed all four Medium findings (SEC-019, SEC-020, SEC-021, SEC-022) in commit `e16e802`. All four fixes have been verified and are correct. No new vulnerabilities were introduced by the fixes. No regressions in prior findings (SEC-017, SEC-018).
+
+### SEC-019 (Medium): UUID Format Validation on site_spec_id -- VERIFIED FIXED
+
+**File:** `supabase/functions/build/index.ts`:444-453
+**Verification:**
+- UUID regex defined as `/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i` at line 444
+- Case-insensitive flag (`i`) correctly handles both upper and lower hex digits
+- Test runs immediately after the basic type/presence check, before any database query
+- Returns 400 with generic error message "Invalid site specification ID." (does not echo the input)
+- Positioned before the `.eq("id", body.site_spec_id)` query at line 527 and all subsequent uses
+
+### SEC-020 (Medium): File Path Sanitisation in Zip Creation -- VERIFIED FIXED
+
+**File:** `supabase/functions/build/index.ts`:476-508
+**Verification:**
+- `SAFE_PATH_REGEX` allowlist defined: `/^[a-zA-Z0-9_\-][a-zA-Z0-9_\-/]*\.(html|xml|txt|css|js|json|ico|svg|webmanifest)$/`
+- Path must start with alphanumeric, underscore, or hyphen (no leading `/` or `.`)
+- Extension allowlist covers all file types the site generator produces (html, xml, txt, css, js, json, ico, svg, webmanifest)
+- Maximum path length of 100 characters enforced at line 496
+- Explicit `..` traversal check at line 497
+- Explicit leading `/` check at line 498
+- Regex match required at line 499
+- All four checks run before the path reaches `createZipBuffer()`
+- Returns 400 with error message that includes the file path (note: this matches SEC-023 Low finding pattern, but path has already passed regex validation at this point so it is constrained to safe characters)
+
+### SEC-021 (Medium): JSON-LD Script Tag Breakout XSS -- VERIFIED FIXED
+
+**File:** `src/lib/pages/home.ts`:143, `src/lib/pages/faq.ts`:116
+**Verification:**
+- `home.ts` line 143: `const safeJson = JSON.stringify(schemaData).replace(/</g, "\\u003c");` -- replaces ALL `<` characters with their Unicode escape, which prevents `</script>` breakout entirely
+- `faq.ts` line 116: `JSON.stringify(faqSchema).replace(/</g, "\\u003c")` -- identical pattern applied inline
+- The `.replace(/</g, "\\u003c")` approach is the standard OWASP-recommended mitigation for JSON-in-HTML-script contexts
+- Using `\\u003c` (replacing all `<`) is more conservative than the targeted `<\/` approach, which is correct -- it blocks all possible HTML tag injection, not just `</script>`
+- The replacement runs after `JSON.stringify()`, so it cannot interfere with JSON structure (JSON strings represent `<` as a literal character, and `\u003c` is a valid JSON string escape)
+
+### SEC-022 (Medium): booking_url Scheme Validation -- VERIFIED FIXED
+
+**File:** `src/lib/pages/contact.ts`:57-63
+**Verification:**
+- Line 57: `const bookingUrl = spec.booking_url.trim();` -- trims whitespace to prevent bypass via `  javascript:...`
+- Line 58: `if (bookingUrl.startsWith("https://") || bookingUrl.startsWith("http://"))` -- requires http or https scheme
+- If scheme validation fails, the booking URL is silently omitted (no link rendered, no error) -- this is the correct approach since the URL simply is not displayed rather than being rendered unsafely
+- The `escapeHtml(bookingUrl)` call at line 60 is preserved for the valid-scheme case, maintaining defence-in-depth against attribute breakout
+- `javascript:`, `data:`, `vbscript:`, and all other non-http(s) schemes are now blocked
+
+### New Findings or Regressions: NONE
+
+No new security findings or regressions were introduced by the fix commit. The fix commit (`e16e802`) only touches the four files identified in Round 1 findings plus `CHANGES-REQUESTED.md` and `tsconfig.tsbuildinfo` (build artifact).
+
+### Prior Findings Regression Check
+
+- **SEC-017 (Custom colour hex validation):** Still intact in `src/lib/site-generator.ts`:37-69. `isValidHexColour()` with `/^#[0-9a-fA-F]{6}$/` and `validateCustomColours()` still present. No regression.
+- **SEC-018 (Social link URL validation):** Still intact in `src/lib/pages/shared.ts`:37-54. `isValidSocialLink()` with `https://` prefix check and 500-char limit still present. No regression.
+
+---
+
+## Round 2 Verdict
+
+**Result:** CLEAN (0 new findings, 4/4 requested fixes verified)
+
+**APPROVE for merge.** All four Medium findings from Round 1 have been correctly addressed. The five Low/informational findings (SEC-023 through SEC-027) remain open and can be addressed in future iterations. No regressions in Phase 3 findings (SEC-017, SEC-018). The Phase 4 implementation is now clear of all Medium+ security findings.
+
+---
+
+## Round 1 Findings (Original Review)
 
 ### SEC-019: Missing UUID Format Validation on site_spec_id in Build Edge Function
 
-**Severity:** Medium
+**Severity:** Medium -- **RESOLVED in Round 2** (commit `e16e802`)
 **Category:** API
 **File:** `supabase/functions/build/index.ts`:427-428
 **Description:** The `site_spec_id` field is validated as a non-empty string (`typeof body.site_spec_id !== "string"`), but there is no check that it conforms to UUID v4 format. The value is passed directly to a Supabase `.eq("id", body.site_spec_id)` query. While Supabase/Postgres will reject malformed UUIDs at the database layer, validating the format before the query prevents unnecessary database calls and provides clearer error messages. Additionally, the unvalidated `site_spec_id` is used directly in a subsequent `.eq("id", body.site_spec_id)` update at lines 556 and 615 via the service role client (which bypasses RLS), so any unexpected string shapes should be rejected early.
 **Risk:** Low. The database column type (uuid) provides backend protection, but defence-in-depth recommends client validation.
 **Recommendation:** Add a UUID regex check: `/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(body.site_spec_id)`. Reject with 400 if invalid.
-**Fix Applied:** No (requires Dev Agent -- changes API validation logic)
+**Fix Applied:** Yes (by Dev Agent in commit `e16e802`) -- **VERIFIED ROUND 2**
 
 ---
 
 ### SEC-020: No File Path Sanitisation in Zip Creation (Path Traversal)
 
-**Severity:** Medium
+**Severity:** Medium -- **RESOLVED in Round 2** (commit `e16e802`)
 **Category:** API
 **File:** `supabase/functions/build/index.ts`:134-135
 **Description:** The `createZipBuffer()` function writes `file.path` directly into the ZIP archive without sanitising it. While the files currently originate from the client-side `generateSite()` function which produces known filenames (e.g., `index.html`, `about.html`), a modified client could send arbitrary paths such as `../../../etc/passwd` or absolute paths. The Edge Function accepts whatever file paths are POSTed in the `files` array. The validation loop at lines 464-486 checks that `file.path` is a string and `file.content` is within size limits, but does not validate the path value itself.
 **Risk:** Medium. Although Netlify's deploy API processes the zip safely (extracting to its own deploy directory), a malicious path in the ZIP could cause unexpected behaviour depending on the extraction tool used. This is a defence-in-depth concern.
 **Recommendation:** Validate that each `file.path`: (1) does not contain `..`, (2) does not start with `/`, (3) matches an allowlist of expected patterns (e.g., `/^[a-z0-9_-]+\.(html|xml|txt)$/`), and (4) has a maximum length. Reject with 400 if any path is invalid.
-**Fix Applied:** No (requires Dev Agent -- changes API validation logic)
+**Fix Applied:** Yes (by Dev Agent in commit `e16e802`) -- **VERIFIED ROUND 2**
 
 ---
 
 ### SEC-021: Unescaped User Content in JSON-LD Schema Script Tags
 
-**Severity:** Medium
+**Severity:** Medium -- **RESOLVED in Round 2** (commit `e16e802`)
 **Category:** Frontend
 **File:** `src/lib/pages/home.ts`:143, `src/lib/pages/faq.ts`:116
 **Description:** The Schema.org JSON-LD blocks use `JSON.stringify(schemaData)` to embed user-provided values (business_name, tagline, service_area, email, phone, social link URLs) directly into `<script type="application/ld+json">` tags. While `JSON.stringify` handles most special characters, it does NOT escape the sequence `</script>`. If a user enters a value containing the literal string `</script>`, this would prematurely close the script tag, enabling HTML injection in the generated page.
@@ -55,13 +122,13 @@ The FAQ page (faq.ts:116) has the same issue with `serviceArea` (derived from `s
 const safeJson = JSON.stringify(schemaData).replace(/</g, "\\u003c");
 ```
 Alternatively, use `.replace(/<\//g, "<\\/")` which is more targeted.
-**Fix Applied:** No (requires Dev Agent -- changes generated output logic)
+**Fix Applied:** Yes (by Dev Agent in commit `e16e802`) -- **VERIFIED ROUND 2**
 
 ---
 
 ### SEC-022: booking_url Rendered as href Without Scheme Validation
 
-**Severity:** Medium
+**Severity:** Medium -- **RESOLVED in Round 2** (commit `e16e802`)
 **Category:** Frontend
 **File:** `src/lib/pages/contact.ts`:57-58
 **Description:** The `booking_url` value is rendered as an `<a href="...">` link in the contact page. While `escapeHtml()` prevents attribute breakout, the URL scheme is not validated. A user could set `booking_url` to `javascript:alert(1)` (which escapeHtml would preserve since it contains no HTML special characters), resulting in:
@@ -73,7 +140,7 @@ The `target="_blank"` attribute causes most browsers to open a new tab/window, w
 Note: Social links are already validated via `isValidSocialLink()` which requires `https://` prefix. The same validation pattern should be applied to `booking_url`.
 **Risk:** Medium. A `javascript:` URI in booking_url could execute JavaScript on the generated public site, depending on browser behaviour.
 **Recommendation:** Validate that `booking_url` starts with `https://` (or `http://`) before rendering it as a clickable link. If invalid, either omit the link or render the URL as plain text.
-**Fix Applied:** No (requires Dev Agent -- changes page generation logic)
+**Fix Applied:** Yes (by Dev Agent in commit `e16e802`) -- **VERIFIED ROUND 2**
 
 ---
 
@@ -181,8 +248,8 @@ The Phase 3 finding recommended validating social links to require `https://` an
 ### Frontend Security (Generated Sites)
 - [PASS] escapeHtml() covers all 5 required characters: `<` `>` `&` `"` `'`
 - [PASS] escapeHtml() applied to: business_name, doula_name, tagline, bio, philosophy, service title/description/price, testimonial quote/name/context, training_provider, service_area, email, phone, booking_url, social link URLs and platform names, photo publicUrl and altText
-- [WARN] JSON-LD script tags vulnerable to `</script>` breakout -- **SEC-021** (Medium)
-- [WARN] booking_url not scheme-validated -- **SEC-022** (Medium)
+- [PASS] JSON-LD script tags sanitised via `.replace(/</g, "\\u003c")` -- **SEC-021 RESOLVED**
+- [PASS] booking_url scheme-validated (http/https only) -- **SEC-022 RESOLVED**
 - [PASS] No `dangerouslySetInnerHTML` or `innerHTML` usage
 - [PASS] Iframe sandbox attributes present (`allow-scripts allow-same-origin`)
 - [PASS] All external links have `rel="noopener noreferrer"`
@@ -199,8 +266,8 @@ The Phase 3 finding recommended validating social links to require `https://` an
 - [PASS] ZIP size limit: 50MB total
 - [PASS] CORS properly configured with allowlist
 - [PASS] Method restricted to POST only
-- [WARN] No UUID validation on site_spec_id -- **SEC-019** (Medium)
-- [WARN] No file path sanitisation for zip entries -- **SEC-020** (Medium)
+- [PASS] UUID format validation on site_spec_id -- **SEC-019 RESOLVED**
+- [PASS] File path sanitisation for zip entries (regex allowlist + traversal checks) -- **SEC-020 RESOLVED**
 - [WARN] Error response echoes user file path -- **SEC-023** (Low)
 
 ### Subdomain & Slug Security
@@ -211,7 +278,7 @@ The Phase 3 finding recommended validating social links to require `https://` an
 
 ### Zip Creation Security
 - [PASS] Total zip size checked against MAX_ZIP_SIZE_BYTES
-- [WARN] File paths in zip not sanitised against traversal -- **SEC-020** (Medium)
+- [PASS] File paths in zip validated via SAFE_PATH_REGEX allowlist -- **SEC-020 RESOLVED**
 
 ### Dependencies
 - [PASS] `npm audit` reports 0 vulnerabilities
@@ -222,40 +289,33 @@ The Phase 3 finding recommended validating social links to require `https://` an
 
 ## Summary
 
-| Severity | Count | Fixed by Security Agent |
-|----------|-------|------------------------|
-| Critical | 0 | 0 |
-| High | 0 | 0 |
-| Medium | 4 | 0 (SEC-019, SEC-020, SEC-021, SEC-022) |
-| Low | 5 | 0 (SEC-023, SEC-024, SEC-025, SEC-026, SEC-027) |
-| **Total** | **9** | **0** |
+| Severity | Count | Resolved | Open |
+|----------|-------|----------|------|
+| Critical | 0 | 0 | 0 |
+| High | 0 | 0 | 0 |
+| Medium | 4 | 4 (SEC-019, SEC-020, SEC-021, SEC-022) | 0 |
+| Low | 5 | 0 | 5 (SEC-023, SEC-024, SEC-025, SEC-026, SEC-027) |
+| **Total** | **9** | **4** | **5** |
 
 ### Prior Finding Follow-Up
 | Finding | Status |
 |---------|--------|
-| SEC-017 (Custom colour hex validation) | ADDRESSED in site-generator.ts |
-| SEC-018 (Social link URL validation) | ADDRESSED in shared.ts |
+| SEC-017 (Custom colour hex validation) | ADDRESSED in site-generator.ts -- no regression |
+| SEC-018 (Social link URL validation) | ADDRESSED in shared.ts -- no regression |
 
 ---
 
 ### Merge Recommendation
 
-**CONDITIONAL APPROVE.** The Phase 4 implementation demonstrates strong security awareness: comprehensive HTML escaping via escapeHtml(), JWT authentication, ownership verification, rate limiting, file size/count limits, CORS configuration, and proper secret isolation. The prior Phase 3 findings (SEC-017, SEC-018) have both been addressed.
+**APPROVE.** All four Medium findings from Round 1 have been correctly fixed by the Dev Agent in commit `e16e802` and verified in Round 2. The Phase 4 implementation demonstrates strong security awareness: comprehensive HTML escaping via escapeHtml(), JSON-LD script sanitisation, URL scheme validation, UUID input validation, file path allowlisting, JWT authentication, ownership verification, rate limiting, file size/count limits, CORS configuration, and proper secret isolation. The prior Phase 3 findings (SEC-017, SEC-018) have both been addressed with no regressions.
 
-**Must fix before merge (2 findings):**
+**Remaining Low/informational findings (do not block merge):**
 
-1. **SEC-021 (Medium):** JSON-LD `</script>` breakout is a real stored XSS vector. The fix is a one-line change to sanitise the JSON.stringify output. This is the only finding in this review that represents an exploitable vulnerability.
-
-2. **SEC-022 (Medium):** booking_url `javascript:` scheme risk. While browser behaviour provides partial protection via `target="_blank"`, this should be validated to `https://` before rendering as an href.
-
-**Should fix but does not block merge (2 findings):**
-
-3. **SEC-019 (Medium):** UUID format validation on site_spec_id.
-4. **SEC-020 (Medium):** File path sanitisation for zip entries.
-
-**Informational / defer (5 findings):**
-
-SEC-023 through SEC-027 are all Low severity and can be addressed in future iterations.
+- SEC-023 (Low): Error response echoes user file path (mitigated by React JSX auto-escaping)
+- SEC-024 (Low): Custom colour validation only in site-generator (current call path is safe)
+- SEC-025 (Low): Social link validation allows non-URL https:// strings (mitigated by escapeHtml)
+- SEC-026 (Low): No build timeout / stuck building state recovery (resilience concern, not security)
+- SEC-027 (Low): Subdomain slug collision after suffix (negligible at current scale)
 
 ---
 

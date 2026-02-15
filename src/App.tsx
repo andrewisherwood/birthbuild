@@ -7,6 +7,7 @@ import AdminSessionsPage from "@/routes/admin/sessions";
 import AdminStudentsPage from "@/routes/admin/students";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { RoleGate } from "@/components/auth/RoleGate";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 
 function NotFoundPage() {
   return (
@@ -19,6 +20,7 @@ function NotFoundPage() {
 
 export function App() {
   return (
+    <ErrorBoundary>
     <Routes>
       <Route path="/" element={<IndexPage />} />
       <Route
@@ -67,5 +69,6 @@ export function App() {
       />
       <Route path="*" element={<NotFoundPage />} />
     </Routes>
+    </ErrorBoundary>
   );
 }

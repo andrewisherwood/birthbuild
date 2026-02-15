@@ -76,7 +76,6 @@ export function ChatInput({ onSend, isLoading, className = "" }: ChatInputProps)
         onClick={handleSend}
         loading={isLoading}
         disabled={!value.trim()}
-        aria-label="Send message"
       >
         Send
       </Button>

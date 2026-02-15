@@ -5,6 +5,8 @@ import DashboardPage from "@/routes/dashboard";
 import PreviewPage from "@/routes/preview";
 import AdminSessionsPage from "@/routes/admin/sessions";
 import AdminStudentsPage from "@/routes/admin/students";
+import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
+import { RoleGate } from "@/components/auth/RoleGate";
 
 function NotFoundPage() {
   return (
@@ -19,11 +21,50 @@ export function App() {
   return (
     <Routes>
       <Route path="/" element={<IndexPage />} />
-      <Route path="/chat" element={<ChatPage />} />
-      <Route path="/dashboard" element={<DashboardPage />} />
-      <Route path="/preview" element={<PreviewPage />} />
-      <Route path="/admin/sessions" element={<AdminSessionsPage />} />
-      <Route path="/admin/students" element={<AdminStudentsPage />} />
+      <Route
+        path="/chat"
+        element={
+          <ProtectedRoute>
+            <ChatPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/dashboard"
+        element={
+          <ProtectedRoute>
+            <DashboardPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/preview"
+        element={
+          <ProtectedRoute>
+            <PreviewPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/admin/sessions"
+        element={
+          <ProtectedRoute>
+            <RoleGate role="instructor">
+              <AdminSessionsPage />
+            </RoleGate>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/admin/students"
+        element={
+          <ProtectedRoute>
+            <RoleGate role="instructor">
+              <AdminStudentsPage />
+            </RoleGate>
+          </ProtectedRoute>
+        }
+      />
       <Route path="*" element={<NotFoundPage />} />
     </Routes>
   );

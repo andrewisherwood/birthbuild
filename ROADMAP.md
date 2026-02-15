@@ -1,7 +1,7 @@
 # Project Roadmap
 
 **Project:** BirthBuild
-**Last Updated:** 2026-02-15T19:30:00Z
+**Last Updated:** 2026-02-15T20:45:00Z
 
 ## Phase Summary
 
@@ -11,7 +11,7 @@
 | 2 | Chatbot Onboarding | ✅ Complete | P0 | ~35 min | Claude proxy, chat UI, question flow, AI content gen, 5 security fixes |
 | 3 | Dashboard Form Editor | ✅ Complete | P0 | ~25 min | 7-tab form, palettes, typography, photo upload, 3 security fixes |
 | 4 | Build Pipeline & Deploy | ✅ Complete | P0 | ~35 min | Static site gen, Netlify deploy, wordmark SVG, 4 security fixes |
-| 5 | Instructor Admin | ⏳ Pending | P0 | — | Sessions, invites, student overview, usage metrics |
+| 5 | Instructor Admin | ✅ Complete | P0 | ~30 min | Admin shell, sessions CRUD, invite edge fn, student table, spec viewer, usage metrics, 3 security fixes |
 | 6 | Polish & Integration Testing | ⏳ Pending | P0 | — | Edit/rebuild flow, WCAG audit, Lighthouse, error handling |
 
 ## Detailed Phases
@@ -45,7 +45,7 @@ Edit/rebuild flow end-to-end. WCAG audit on generated sites. Lighthouse optimisa
 ## Agent Update — 2026-02-15
 
 **Updated by:** Conductor
-**Phase Status:** Phases 1–4 complete, starting Phase 5
+**Phase Status:** Phases 1–5 complete, starting Phase 6
 **Changes:**
 - Phase 1 (Foundation & Auth) implemented, reviewed, and merged (PR #1)
 - Security review found 6 issues (1 Critical, 2 High, 3 Low) — all resolved in 1 review-fix round
@@ -87,4 +87,21 @@ Edit/rebuild flow end-to-end. WCAG audit on generated sites. Lighthouse optimisa
 - SEC-019: UUID format validation on site_spec_id
 - SEC-020: File path sanitisation in ZIP creation (traversal prevention)
 
-**Next Priority:** Plan and execute Phase 5 (Instructor Admin)
+- Phase 5 (Instructor Admin) implemented, reviewed, and merged (PR #5)
+- AdminShell layout component with nav, sign out, green-700 active link styling
+- Session CRUD: create, archive, active/all filter, student count, live site count
+- useSessions hook: tenant-scoped session management
+- Invite Edge Function: bulk magic link generation with JWT auth, rate limiting (100/hr, 50/request)
+  - Cross-tenant protection: verify existing profile tenant_id before session_id update
+  - Check-before-increment rate limiter logic
+  - Cache-Control: no-store on magic link responses
+- useStudents hook: student listing with site_spec join, session filtering, completion %
+- Students page: table with status badges, progress bars, session filter, invite modal with results
+- SpecViewer: read-only slide-over panel showing all site_spec sections (7 sections, colour swatches, expandable text)
+- UsageMetrics: 4 metric cards with efficient count queries
+- Security review found 7 issues (1 High, 2 Medium, 4 Low) — 3 mandatory fixes resolved in 1 round
+- SEC-028: Cross-tenant profile reassignment prevention (tenant_id check)
+- SEC-029: Rate limiter check-before-increment logic
+- SEC-030: Cache-Control no-store header on invite response
+
+**Next Priority:** Plan and execute Phase 6 (Polish & Integration Testing)

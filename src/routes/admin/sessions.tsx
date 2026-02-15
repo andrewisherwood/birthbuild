@@ -1,7 +1,9 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { AdminShell } from "@/components/admin/AdminShell";
+import { UsageMetrics } from "@/components/admin/UsageMetrics";
 import { useSessions } from "@/hooks/useSessions";
+import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Card } from "@/components/ui/Card";
@@ -10,6 +12,7 @@ import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
 type SessionFilter = "active" | "all";
 
 export default function AdminSessionsPage() {
+  const { profile } = useAuth();
   const { sessions, loading, error, createSession, archiveSession } =
     useSessions();
   const [filter, setFilter] = useState<SessionFilter>("active");
@@ -40,6 +43,11 @@ export default function AdminSessionsPage() {
 
   return (
     <AdminShell>
+      {/* Usage metrics */}
+      {profile?.tenant_id && (
+        <UsageMetrics tenantId={profile.tenant_id} />
+      )}
+
       {/* Page header */}
       <div className="mb-6 flex items-center justify-between">
         <h2 className="text-xl font-semibold text-gray-900">Sessions</h2>

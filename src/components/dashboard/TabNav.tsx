@@ -1,3 +1,4 @@
+import { useRef, useEffect, useState, useCallback } from "react";
 import type { SiteSpec } from "@/types/site-spec";
 
 export type TabKey =
@@ -59,42 +60,103 @@ export function TabNav({
   siteSpec,
   className = "",
 }: TabNavProps) {
-  return (
-    <div
-      className={`overflow-x-auto border-b border-gray-200 ${className}`}
-      role="tablist"
-      aria-label="Dashboard sections"
-    >
-      <nav className="flex min-w-max gap-0">
-        {TABS.map((tab) => {
-          const isActive = activeTab === tab.key;
-          const isComplete = isTabComplete(tab.key, siteSpec);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const activeTabRef = useRef<HTMLButtonElement>(null);
+  const [showLeftFade, setShowLeftFade] = useState(false);
+  const [showRightFade, setShowRightFade] = useState(false);
 
-          return (
-            <button
-              key={tab.key}
-              role="tab"
-              id={`tab-${tab.key}`}
-              aria-selected={isActive}
-              aria-controls={`tabpanel-${tab.key}`}
-              onClick={() => onTabChange(tab.key)}
-              className={`relative flex items-center gap-2 whitespace-nowrap px-4 py-3 text-sm font-medium transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-green-700 ${
-                isActive
-                  ? "border-b-2 border-green-700 text-green-700"
-                  : "text-gray-500 hover:text-gray-700"
-              }`}
-            >
-              {isComplete && (
-                <span
-                  className="inline-block h-2 w-2 rounded-full bg-green-600"
-                  aria-label={`${tab.label} complete`}
-                />
-              )}
-              {tab.label}
-            </button>
-          );
-        })}
-      </nav>
+  const updateFades = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const { scrollLeft, scrollWidth, clientWidth } = el;
+    setShowLeftFade(scrollLeft > 4);
+    setShowRightFade(scrollLeft + clientWidth < scrollWidth - 4);
+  }, []);
+
+  // Update fades on scroll
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    el.addEventListener("scroll", updateFades, { passive: true });
+    // Initial check
+    updateFades();
+    return () => el.removeEventListener("scroll", updateFades);
+  }, [updateFades]);
+
+  // Also re-check fades on resize
+  useEffect(() => {
+    window.addEventListener("resize", updateFades);
+    return () => window.removeEventListener("resize", updateFades);
+  }, [updateFades]);
+
+  // Auto-scroll active tab into view on mount
+  useEffect(() => {
+    if (activeTabRef.current) {
+      activeTabRef.current.scrollIntoView({
+        inline: "center",
+        block: "nearest",
+        behavior: "smooth",
+      });
+    }
+  }, [activeTab]);
+
+  return (
+    <div className={`relative border-b border-gray-200 ${className}`}>
+      {/* Left fade overlay */}
+      {showLeftFade && (
+        <div
+          className="pointer-events-none absolute left-0 top-0 bottom-0 z-10 w-8 bg-gradient-to-r from-white to-transparent"
+          aria-hidden="true"
+        />
+      )}
+
+      {/* Right fade overlay */}
+      {showRightFade && (
+        <div
+          className="pointer-events-none absolute right-0 top-0 bottom-0 z-10 w-8 bg-gradient-to-l from-white to-transparent"
+          aria-hidden="true"
+        />
+      )}
+
+      <div
+        ref={scrollRef}
+        className="overflow-x-auto scrollbar-hide"
+        role="tablist"
+        aria-label="Dashboard sections"
+      >
+        <nav className="flex min-w-max gap-0">
+          {TABS.map((tab) => {
+            const isActive = activeTab === tab.key;
+            const isComplete = isTabComplete(tab.key, siteSpec);
+
+            return (
+              <button
+                key={tab.key}
+                ref={isActive ? activeTabRef : undefined}
+                role="tab"
+                id={`tab-${tab.key}`}
+                aria-selected={isActive}
+                aria-controls={`tabpanel-${tab.key}`}
+                onClick={() => onTabChange(tab.key)}
+                className={`relative flex items-center gap-2 whitespace-nowrap px-4 py-3 text-sm font-medium transition-colors sm:text-base focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-green-700 ${
+                  isActive
+                    ? "border-b-2 border-green-700 text-green-700"
+                    : "text-gray-500 hover:text-gray-700"
+                }`}
+                style={{ minHeight: "44px" }}
+              >
+                {isComplete && (
+                  <span
+                    className="inline-block h-2 w-2 rounded-full bg-green-600"
+                    aria-label={`${tab.label} complete`}
+                  />
+                )}
+                {tab.label}
+              </button>
+            );
+          })}
+        </nav>
+      </div>
     </div>
   );
 }

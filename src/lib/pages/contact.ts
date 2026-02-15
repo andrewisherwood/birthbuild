@@ -54,9 +54,12 @@ export function generateContactPage(
     );
   }
   if (spec.booking_url) {
-    contactItems.push(
-      `<dt>Book Online</dt><dd><a href="${escapeHtml(spec.booking_url)}" target="_blank" rel="noopener noreferrer">Schedule a consultation</a></dd>`,
-    );
+    const bookingUrl = spec.booking_url.trim();
+    if (bookingUrl.startsWith("https://") || bookingUrl.startsWith("http://")) {
+      contactItems.push(
+        `<dt>Book Online</dt><dd><a href="${escapeHtml(bookingUrl)}" target="_blank" rel="noopener noreferrer">Schedule a consultation</a></dd>`,
+      );
+    }
   }
   if (spec.service_area) {
     contactItems.push(

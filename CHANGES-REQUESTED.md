@@ -1,60 +1,58 @@
-# Changes Requested — Phase 2
+# Changes Requested — Phase 4
 
 **Source:** QA Report + Security Review
-**PR:** #2
+**PR:** #4
 **Round:** 1 (Max: 3)
-**Requested:** 2026-02-15T18:10:00Z
+**Requested:** 2026-02-15T19:25:00Z
 
 ---
 
 ## From QA
 
-**No blocking issues.** QA passed 22/22 checks with 4 advisory notes (AN-001 through AN-004). No action required.
+**No blocking issues.** QA passed 36/36 checks. No action required.
 
 ---
 
 ## From Security
 
-### SEC-007 (Medium): dangerouslySetInnerHTML in MessageBubble
-**File:** `src/components/chat/MessageBubble.tsx:128`
-**Issue:** Chat messages rendered via `dangerouslySetInnerHTML`. HTML escaping is applied before markdown transforms, but the pattern is fragile.
-**Fix:** Replace `dangerouslySetInnerHTML` with React-based rendering. Use JSX elements to render markdown output instead of raw HTML injection. Parse markdown into React elements (bold → `<strong>`, italic → `<em>`, lists → `<ul>/<li>`).
+### SEC-021 (Medium): JSON-LD `</script>` Breakout XSS
+**Files:** `src/lib/pages/home.ts`, `src/lib/pages/faq.ts`
+**Issue:** JSON-LD schema blocks use `JSON.stringify()` to embed user content into `<script type="application/ld+json">` tags. `JSON.stringify` does NOT escape the sequence `</script>`, which allows a user to break out of the script tag and inject arbitrary HTML/JavaScript. This is a stored XSS vector on generated public sites.
+**Fix:** After `JSON.stringify()`, replace all `<` characters with `\u003c`:
+```typescript
+const safeJson = JSON.stringify(schemaData).replace(/</g, "\\u003c");
+```
+Apply this to both `home.ts` and `faq.ts` where JSON-LD is generated.
 
-### SEC-008 (Medium): Claude API Error Details Forwarded to Client
-**File:** `supabase/functions/chat/index.ts:250-262`
-**Issue:** Raw Claude API error text forwarded in `detail` field. Could leak rate limit info, model details, or API key format hints.
-**Fix:** Return a generic error message ("The AI service is currently unavailable. Please try again.") instead of forwarding raw error text. Log the actual error server-side using `console.error()` for debugging.
+### SEC-022 (Medium): booking_url Rendered as href Without Scheme Validation
+**File:** `src/lib/pages/contact.ts`
+**Issue:** `booking_url` is rendered as `<a href="...">` without validating the URL scheme. A `javascript:alert(1)` value would pass `escapeHtml()` and be rendered as a clickable link.
+**Fix:** Validate that `booking_url` starts with `https://` or `http://` before rendering as a link. If invalid, omit the booking link section entirely.
 
-### SEC-009 (Medium): Client Controls System Prompt
-**File:** `supabase/functions/chat/index.ts:218-219`
-**Issue:** System prompt accepted from client request body. A malicious user can override the chatbot personality/instructions via direct HTTP request.
-**Fix:** Hardcode the system prompt in the Edge Function. Define the `SYSTEM_PROMPT` constant directly in the Edge Function file. Do not accept it from the client request body.
+### SEC-019 (Medium): Missing UUID Format Validation on site_spec_id
+**File:** `supabase/functions/build/index.ts`
+**Issue:** `site_spec_id` is validated as a non-empty string but not as a UUID format. It is passed to database queries via service role client.
+**Fix:** Add UUID regex validation before the database query:
+```typescript
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+if (!UUID_REGEX.test(body.site_spec_id)) {
+  // return 400 "Invalid site specification ID."
+}
+```
 
-### SEC-010 (Medium): Client Controls Tool Definitions
-**File:** `supabase/functions/chat/index.ts:223-225`
-**Issue:** Tool definitions accepted from client request body. Combined with SEC-009, gives full control over Claude API call.
-**Fix:** Hardcode the tool definitions in the Edge Function. Define the `CHAT_TOOLS` constant directly in the Edge Function file. Do not accept it from the client request body.
-
-### SEC-011 (Medium): Message Length Validation Only Checks Last Message
-**File:** `supabase/functions/chat/index.ts:194-210`
-**Issue:** Only the last message is validated for length. Earlier messages can be arbitrarily long, enabling token/cost abuse.
-**Fix:** Validate ALL messages for length (max 4000 chars each), and add a total payload size limit (e.g., 100KB for the entire messages array).
-
-### SEC-012 (Low): In-Memory Rate Limiting Resets on Cold Start
-**Informational.** Acceptable for current phase. No action required.
-
-### SEC-013 (Low): CORS Fallback Defaults to Localhost Origin
-**Informational.** No action required for this phase.
+### SEC-020 (Medium): No File Path Sanitisation in Zip Creation
+**File:** `supabase/functions/build/index.ts`
+**Issue:** File paths from the client are written directly into the ZIP archive without sanitisation. A modified client could send paths like `../../../etc/passwd`.
+**Fix:** Validate each file path in the validation loop: must not contain `..`, must not start with `/`, should match expected pattern (e.g., alphanumeric with `.html`, `.xml`, `.txt`, `.css` extensions), max length 100 chars.
 
 ---
 
 ## Instructions
 
 1. Read all issues above
-2. Fix all mandatory issues (SEC-007 through SEC-011 — 5 fixes)
-3. For SEC-009/SEC-010: Move the system prompt and tool definitions INTO the Edge Function file. Update `src/lib/claude.ts` to no longer send `system` and `tools` in the request body. The Edge Function should only accept `messages` from the client.
+2. Fix all mandatory issues (SEC-021, SEC-022, SEC-019, SEC-020 — 4 fixes)
+3. SEC-023 through SEC-027 are Low/Informational — no action required for this phase
 4. Test locally: `npm run build && npx tsc --noEmit`
-5. Push to same branch: `git push origin phase-2-chatbot-onboarding`
-6. Update dev.json status after pushing fixes
+5. Push to same branch: `git push origin phase-4-build-pipeline-deploy`
 
-**Coordinator will re-run QA and Security. If all issues resolve → merge. If new issues → next round.**
+**Coordinator will re-run QA and Security. If all issues resolve -> merge. If new issues -> next round.**

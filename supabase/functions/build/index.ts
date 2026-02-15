@@ -440,6 +440,18 @@ Deno.serve(async (req: Request): Promise<Response> => {
     );
   }
 
+  // SEC-019: Validate site_spec_id is a valid UUID format
+  const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (!UUID_REGEX.test(body.site_spec_id)) {
+    return new Response(
+      JSON.stringify({ error: "Invalid site specification ID." }),
+      {
+        status: 400,
+        headers: { ...cors, "Content-Type": "application/json" },
+      },
+    );
+  }
+
   if (body.files.length === 0) {
     return new Response(
       JSON.stringify({ error: "No files provided for deployment." }),
@@ -460,7 +472,11 @@ Deno.serve(async (req: Request): Promise<Response> => {
     );
   }
 
-  // Validate individual file sizes
+  // SEC-020: File path validation pattern
+  const SAFE_PATH_REGEX = /^[a-zA-Z0-9_\-][a-zA-Z0-9_\-/]*\.(html|xml|txt|css|js|json|ico|svg|webmanifest)$/;
+  const MAX_PATH_LENGTH = 100;
+
+  // Validate individual files (paths + sizes)
   for (const file of body.files) {
     if (
       typeof file.path !== "string" ||
@@ -474,6 +490,23 @@ Deno.serve(async (req: Request): Promise<Response> => {
         },
       );
     }
+
+    // SEC-020: Sanitise file paths to prevent directory traversal
+    if (
+      file.path.length > MAX_PATH_LENGTH ||
+      file.path.includes("..") ||
+      file.path.startsWith("/") ||
+      !SAFE_PATH_REGEX.test(file.path)
+    ) {
+      return new Response(
+        JSON.stringify({ error: `Invalid file path: "${file.path}".` }),
+        {
+          status: 400,
+          headers: { ...cors, "Content-Type": "application/json" },
+        },
+      );
+    }
+
     if (new TextEncoder().encode(file.content).length > MAX_FILE_CONTENT_BYTES) {
       return new Response(
         JSON.stringify({ error: `File "${file.path}" exceeds maximum size.` }),

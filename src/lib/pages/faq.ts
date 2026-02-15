@@ -113,7 +113,7 @@ ${head}
     ${ctaHtml}
   </main>
   ${footer}
-  <script type="application/ld+json">${JSON.stringify(faqSchema)}</script>
+  <script type="application/ld+json">${JSON.stringify(faqSchema).replace(/</g, "\\u003c")}</script>
 </body>
 </html>`;
 }

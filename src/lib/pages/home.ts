@@ -140,7 +140,8 @@ export function generateHomePage(
   if (validSocial.length > 0) {
     schemaData["sameAs"] = validSocial.map((l) => l.url);
   }
-  const schemaHtml = `<script type="application/ld+json">${JSON.stringify(schemaData)}</script>`;
+  const safeJson = JSON.stringify(schemaData).replace(/</g, "\\u003c");
+  const schemaHtml = `<script type="application/ld+json">${safeJson}</script>`;
 
   // CTA section
   const ctaHtml = spec.pages.includes("contact")

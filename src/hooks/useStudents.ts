@@ -9,6 +9,7 @@ interface UseStudentsReturn {
   loading: boolean;
   error: string | null;
   refetch: () => Promise<void>;
+  deleteStudent: (studentId: string) => Promise<void>;
 }
 
 /** Required fields used to calculate spec completion percentage. */
@@ -131,6 +132,30 @@ export function useStudents(sessionId?: string): UseStudentsReturn {
     setLoading(false);
   }, [profile?.tenant_id, sessionId]);
 
+  const deleteStudent = useCallback(
+    async (studentId: string) => {
+      setError(null);
+
+      // Delete site_specs belonging to this student
+      await supabase.from("site_specs").delete().eq("user_id", studentId);
+
+      // Delete the profile (detaches from tenant/session)
+      const { error: deleteError } = await supabase
+        .from("profiles")
+        .delete()
+        .eq("id", studentId);
+
+      if (deleteError) {
+        setError("Failed to remove student. Please try again.");
+        return;
+      }
+
+      // Optimistic removal from local state
+      setStudents((prev) => prev.filter((s) => s.id !== studentId));
+    },
+    [],
+  );
+
   useEffect(() => {
     void fetchStudents();
   }, [fetchStudents]);
@@ -140,5 +165,6 @@ export function useStudents(sessionId?: string): UseStudentsReturn {
     loading,
     error,
     refetch: fetchStudents,
+    deleteStudent,
   };
 }

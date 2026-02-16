@@ -88,7 +88,7 @@ export default function AdminStudentsPage() {
   const sessionFilter = searchParams.get("session") ?? "";
 
   const { sessions } = useSessions();
-  const { students, loading, error, refetch } = useStudents(
+  const { students, loading, error, refetch, deleteStudent } = useStudents(
     sessionFilter || undefined,
   );
 
@@ -342,6 +342,21 @@ export default function AdminStudentsPage() {
                             View Site
                           </a>
                         )}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (
+                              window.confirm(
+                                `Remove ${student.display_name ?? student.email}? This will delete their profile and site data.`,
+                              )
+                            ) {
+                              void deleteStudent(student.id);
+                            }
+                          }}
+                          className="text-sm font-medium text-red-600 hover:text-red-700"
+                        >
+                          Remove
+                        </button>
                       </div>
                     </td>
                   </tr>
@@ -389,8 +404,8 @@ export default function AdminStudentsPage() {
                 </div>
               )}
 
-              {student.site_spec && (
-                <div className="mt-3 flex gap-3">
+              <div className="mt-3 flex gap-3">
+                {student.site_spec && (
                   <button
                     type="button"
                     onClick={() =>
@@ -400,18 +415,33 @@ export default function AdminStudentsPage() {
                   >
                     View Spec
                   </button>
-                  {student.site_spec.deploy_url && (
-                    <a
-                      href={student.site_spec.deploy_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-sm font-medium text-green-700 hover:text-green-800"
-                    >
-                      View Site
-                    </a>
-                  )}
-                </div>
-              )}
+                )}
+                {student.site_spec?.deploy_url && (
+                  <a
+                    href={student.site_spec.deploy_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-sm font-medium text-green-700 hover:text-green-800"
+                  >
+                    View Site
+                  </a>
+                )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (
+                      window.confirm(
+                        `Remove ${student.display_name ?? student.email}? This will delete their profile and site data.`,
+                      )
+                    ) {
+                      void deleteStudent(student.id);
+                    }
+                  }}
+                  className="text-sm font-medium text-red-600 hover:text-red-700"
+                >
+                  Remove
+                </button>
+              </div>
             </Card>
           ))}
         </div>

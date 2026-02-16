@@ -22,6 +22,7 @@ interface UsePhotoUploadReturn {
   deletePhoto: (photoId: string, storagePath: string) => Promise<void>;
   updatePhotoAltText: (photoId: string, altText: string) => Promise<void>;
   getPublicUrl: (storagePath: string) => string;
+  photoUrls: Record<string, string>;
 }
 
 export function usePhotoUpload(siteSpecId: string | null): UsePhotoUploadReturn {
@@ -30,6 +31,29 @@ export function usePhotoUpload(siteSpecId: string | null): UsePhotoUploadReturn 
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [photoUrls, setPhotoUrls] = useState<Record<string, string>>({});
+
+  // Generate signed URLs for a list of storage paths (private bucket)
+  const generateSignedUrls = useCallback(
+    async (paths: string[]): Promise<Record<string, string>> => {
+      if (paths.length === 0) return {};
+
+      const { data, error: signError } = await supabase.storage
+        .from("photos")
+        .createSignedUrls(paths, 3600); // 1 hour expiry
+
+      if (signError || !data) return {};
+
+      const urlMap: Record<string, string> = {};
+      for (const item of data) {
+        if (item.signedUrl) {
+          urlMap[item.path ?? ""] = item.signedUrl;
+        }
+      }
+      return urlMap;
+    },
+    [],
+  );
 
   // Fetch photos for this site spec
   useEffect(() => {
@@ -59,7 +83,16 @@ export function usePhotoUpload(siteSpecId: string | null): UsePhotoUploadReturn 
         return;
       }
 
-      setPhotos((data as Photo[]) ?? []);
+      const fetchedPhotos = (data as Photo[]) ?? [];
+      setPhotos(fetchedPhotos);
+
+      // Pre-generate signed URLs for all photos
+      const paths = fetchedPhotos.map((p) => p.storage_path);
+      const urls = await generateSignedUrls(paths);
+      if (mounted) {
+        setPhotoUrls(urls);
+      }
+
       setLoading(false);
     }
 
@@ -68,14 +101,15 @@ export function usePhotoUpload(siteSpecId: string | null): UsePhotoUploadReturn 
     return () => {
       mounted = false;
     };
-  }, [siteSpecId]);
+  }, [siteSpecId, generateSignedUrls]);
 
-  const getPublicUrl = useCallback((storagePath: string): string => {
-    const { data } = supabase.storage
-      .from("photos")
-      .getPublicUrl(storagePath);
-    return data.publicUrl;
-  }, []);
+  // Sync fallback: returns cached signed URL or empty string
+  const getPublicUrl = useCallback(
+    (storagePath: string): string => {
+      return photoUrls[storagePath] ?? "";
+    },
+    [photoUrls],
+  );
 
   const uploadPhoto = useCallback(
     async (file: File, purpose: string, altText: string): Promise<Photo | null> => {
@@ -146,10 +180,15 @@ export function usePhotoUpload(siteSpecId: string | null): UsePhotoUploadReturn 
 
       const newPhoto = photoRow as Photo;
       setPhotos((prev) => [...prev, newPhoto]);
+
+      // Generate a signed URL for the newly uploaded photo
+      const newUrls = await generateSignedUrls([storagePath]);
+      setPhotoUrls((prev) => ({ ...prev, ...newUrls }));
+
       setUploading(false);
       return newPhoto;
     },
-    [user, siteSpecId, photos.length],
+    [user, siteSpecId, photos.length, generateSignedUrls],
   );
 
   const deletePhoto = useCallback(
@@ -212,5 +251,6 @@ export function usePhotoUpload(siteSpecId: string | null): UsePhotoUploadReturn 
     deletePhoto,
     updatePhotoAltText,
     getPublicUrl,
+    photoUrls,
   };
 }

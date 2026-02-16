@@ -153,14 +153,29 @@ export function useBuild(siteSpec: SiteSpec | null): UseBuildReturn {
         console.error("[useBuild] Failed to fetch photos:", photoError.message);
       }
 
-      const photos: PhotoData[] = (photoRows ?? []).map((row) => {
-        const { data: urlData } = supabase.storage
+      // Generate signed URLs for the private photos bucket
+      const storagePaths = (photoRows ?? []).map(
+        (row) => row.storage_path as string,
+      );
+      const signedUrlMap: Record<string, string> = {};
+      if (storagePaths.length > 0) {
+        const { data: signedData } = await supabase.storage
           .from("photos")
-          .getPublicUrl(row.storage_path as string);
+          .createSignedUrls(storagePaths, 3600);
+        if (signedData) {
+          for (const item of signedData) {
+            if (item.signedUrl) {
+              signedUrlMap[item.path ?? ""] = item.signedUrl;
+            }
+          }
+        }
+      }
 
+      const photos: PhotoData[] = (photoRows ?? []).map((row) => {
+        const path = row.storage_path as string;
         return {
           purpose: (row.purpose as string) ?? "general",
-          publicUrl: urlData.publicUrl,
+          publicUrl: signedUrlMap[path] ?? "",
           altText: (row.alt_text as string) ?? "",
         };
       });

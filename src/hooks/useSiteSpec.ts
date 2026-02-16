@@ -129,6 +129,22 @@ export function useSiteSpec(): UseSiteSpecReturn {
 
     setError(null);
 
+    // Guard: check if a spec already exists to prevent duplicates from
+    // concurrent React effects or rapid navigation.
+    const { data: existing } = await supabase
+      .from("site_specs")
+      .select("*")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (existing) {
+      const spec = existing as SiteSpec;
+      setSiteSpec(spec);
+      return spec;
+    }
+
     const newSpec = {
       user_id: user.id,
       tenant_id: profile?.tenant_id ?? null,

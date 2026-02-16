@@ -349,8 +349,11 @@ Deno.serve(async (req: Request): Promise<Response> => {
       let userId: string;
 
       if (existingProfile) {
-        // User exists — verify they belong to the caller's tenant
-        if (existingProfile.tenant_id !== tenantId) {
+        // User exists — verify they belong to the caller's tenant.
+        // A null tenant_id means the user is unassigned (e.g. signed up
+        // via magic link before being invited) — allow the invite to
+        // claim them.
+        if (existingProfile.tenant_id && existingProfile.tenant_id !== tenantId) {
           results.push({
             email,
             success: false,
@@ -359,12 +362,14 @@ Deno.serve(async (req: Request): Promise<Response> => {
           continue;
         }
 
-        // Same tenant — update their session_id if needed
+        // Same tenant or unassigned — update with session + tenant
         userId = existingProfile.id as string;
 
         await serviceClient
           .from("profiles")
           .update({
+            role: "student",
+            tenant_id: tenantId,
             session_id: body.session_id,
             updated_at: new Date().toISOString(),
           })
@@ -392,21 +397,25 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
         userId = newUser.user.id;
 
-        // Create profile for the new student
-        const { error: profileInsertError } = await serviceClient
+        // Upsert profile — the handle_new_user trigger may have already
+        // created a bare profile row, so update it with student details.
+        const { error: profileUpsertError } = await serviceClient
           .from("profiles")
-          .insert({
-            id: userId,
-            email,
-            role: "student",
-            tenant_id: tenantId,
-            session_id: body.session_id,
-          });
+          .upsert(
+            {
+              id: userId,
+              email,
+              role: "student",
+              tenant_id: tenantId,
+              session_id: body.session_id,
+            },
+            { onConflict: "id" },
+          );
 
-        if (profileInsertError) {
+        if (profileUpsertError) {
           console.error(
             `[invite] Failed to create profile for ${email}:`,
-            profileInsertError.message,
+            profileUpsertError.message,
           );
           results.push({
             email,
@@ -417,7 +426,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
         }
       }
 
-      // Generate magic link
+      // Generate magic link (for the copy-link fallback in the UI)
       const { data: linkData, error: linkError } =
         await serviceClient.auth.admin.generateLink({
           type: "magiclink",
@@ -435,6 +444,26 @@ Deno.serve(async (req: Request): Promise<Response> => {
           error: "Failed to generate magic link.",
         });
         continue;
+      }
+
+      // Send the magic link email via Supabase Auth OTP endpoint.
+      // This uses the configured SMTP (Brevo) to deliver the email.
+      const otpResponse = await fetch(`${supabaseUrl}/auth/v1/otp`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          apikey: supabaseAnonKey,
+        },
+        body: JSON.stringify({ email }),
+      });
+
+      if (!otpResponse.ok) {
+        const otpBody = await otpResponse.text();
+        console.error(
+          `[invite] Failed to send magic link email for ${email}:`,
+          otpBody,
+        );
+        // Still succeed — instructor can copy the link manually
       }
 
       results.push({

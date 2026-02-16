@@ -46,35 +46,11 @@ export function useAuth(): UseAuthReturn {
   useEffect(() => {
     let mounted = true;
 
-    async function getInitialSession() {
-      try {
-        const {
-          data: { session: currentSession },
-        } = await supabase.auth.getSession();
-
-        if (!mounted) return;
-
-        setSession(currentSession);
-        setUser(currentSession?.user ?? null);
-
-        if (currentSession?.user) {
-          const userProfile = await fetchProfile(currentSession.user.id);
-          if (!mounted) return;
-          setProfile(userProfile);
-          setRole(userProfile?.role ?? null);
-        }
-      } catch {
-        // Auth session fetch failed (network error, invalid credentials, etc.).
-        // Fall through to setLoading(false) so the UI renders instead of spinning.
-      }
-
-      if (mounted) {
-        setLoading(false);
-      }
-    }
-
-    void getInitialSession();
-
+    // Use onAuthStateChange as the single source of truth for session state.
+    // It fires INITIAL_SESSION immediately (with hash-token processing if
+    // present) then SIGNED_IN / TOKEN_REFRESHED / SIGNED_OUT as needed.
+    // Calling getSession() separately races with hash-token processing and
+    // can resolve with null before the magic-link tokens are consumed.
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (_event, newSession) => {

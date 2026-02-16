@@ -68,7 +68,7 @@ export default function DashboardPage() {
       case "business":
         return <BusinessDetailsTab siteSpec={spec} onFieldChange={debouncedUpdate} />;
       case "design":
-        return <DesignTab siteSpec={spec} onFieldChange={debouncedUpdate} />;
+        return <DesignTab siteSpec={spec} onFieldChange={debouncedUpdate} updateSiteSpec={updateSiteSpec} />;
       case "content":
         return <ContentTab siteSpec={spec} onFieldChange={debouncedUpdate} />;
       case "photos":

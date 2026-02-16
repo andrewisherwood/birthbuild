@@ -6,6 +6,16 @@
 
 import type { SiteSpec, CustomColours, StyleOption, SocialLinks } from "@/types/site-spec";
 import { getPaletteColours, TYPOGRAPHY_CONFIG } from "@/lib/palettes";
+import {
+  findFont,
+  buildGoogleFontsUrl,
+  SPACING_SCALES,
+  BORDER_RADIUS_SCALES,
+  TYPOGRAPHY_SCALES,
+  type SpacingTokens,
+  type BorderRadiusTokens,
+  type TypographyScaleTokens,
+} from "@/lib/design-tokens";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -93,11 +103,38 @@ export function generateHead(
 ): string {
   const escapedTitle = escapeHtml(pageTitle);
   const escapedDescription = escapeHtml(pageDescription);
-  const typography = TYPOGRAPHY_CONFIG[spec.typography];
-  const colours = getPaletteColours(spec.palette, spec.custom_colours);
-  const headingFont = typography.heading;
-  const bodyFont = typography.body;
-  const css = generateCss(colours, headingFont, bodyFont, spec.style);
+
+  let colours: CustomColours;
+  let headingFont: string;
+  let bodyFont: string;
+  let googleFontsUrl: string;
+  let designTokens: {
+    spacing: SpacingTokens;
+    borderRadius: BorderRadiusTokens;
+    typographyScale: TypographyScaleTokens;
+  } | undefined;
+
+  if (spec.design) {
+    // Use advanced design config
+    colours = spec.design.colours;
+    headingFont = spec.design.typography.headingFont;
+    bodyFont = spec.design.typography.bodyFont;
+    googleFontsUrl = buildGoogleFontsUrl(headingFont, bodyFont);
+    designTokens = {
+      spacing: SPACING_SCALES[spec.design.spacing.density],
+      borderRadius: BORDER_RADIUS_SCALES[spec.design.borderRadius],
+      typographyScale: TYPOGRAPHY_SCALES[spec.design.typography.scale],
+    };
+  } else {
+    // Use base fields
+    const typography = TYPOGRAPHY_CONFIG[spec.typography];
+    colours = getPaletteColours(spec.palette, spec.custom_colours);
+    headingFont = typography.heading;
+    bodyFont = typography.body;
+    googleFontsUrl = typography.googleFontsUrl;
+  }
+
+  const css = generateCss(colours, headingFont, bodyFont, spec.style, designTokens);
 
   return `<head>
     <meta charset="utf-8" />
@@ -112,7 +149,7 @@ export function generateHead(
     <meta name="twitter:description" content="${escapedDescription}" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="${typography.googleFontsUrl}" rel="stylesheet" />
+    <link href="${googleFontsUrl}" rel="stylesheet" />
     <style>${css}</style>
   </head>`;
 }
@@ -196,9 +233,35 @@ export function generateCss(
   headingFont: string,
   bodyFont: string,
   style: StyleOption,
+  designTokens?: {
+    spacing: SpacingTokens;
+    borderRadius: BorderRadiusTokens;
+    typographyScale: TypographyScaleTokens;
+  },
 ): string {
-  const borderRadius = style === "modern" ? "8px" : style === "classic" ? "4px" : "2px";
-  const btnRadius = style === "modern" ? "6px" : style === "classic" ? "4px" : "2px";
+  // Border radius: use design tokens if provided, otherwise derive from style
+  const cardRadius = designTokens?.borderRadius.card ?? (style === "modern" ? "8px" : style === "classic" ? "4px" : "2px");
+  const btnRadius = designTokens?.borderRadius.button ?? (style === "modern" ? "6px" : style === "classic" ? "4px" : "2px");
+  const imgRadius = designTokens?.borderRadius.image ?? cardRadius;
+
+  // Spacing
+  const sectionPadding = designTokens?.spacing.sectionPadding ?? "4rem 1.5rem";
+  const heroPadding = designTokens?.spacing.heroPadding ?? "5rem 1.5rem";
+  const cardPadding = designTokens?.spacing.cardPadding ?? "2rem";
+  const gap = designTokens?.spacing.gap ?? "1.5rem";
+
+  // Typography scale
+  const h1Size = designTokens?.typographyScale.h1 ?? "2.5rem";
+  const h2Size = designTokens?.typographyScale.h2 ?? "2rem";
+  const h3Size = designTokens?.typographyScale.h3 ?? "1.25rem";
+  const bodySize = designTokens?.typographyScale.body ?? "1rem";
+  const taglineSize = designTokens?.typographyScale.tagline ?? "1.2rem";
+
+  // Font category fallback
+  const headingFontDef = findFont(headingFont);
+  const headingFallback = headingFontDef?.category === "serif" ? "serif" : "sans-serif";
+  const bodyFontDef = findFont(bodyFont);
+  const bodyFallback = bodyFontDef?.category === "serif" ? "serif" : "sans-serif";
 
   return `
     :root {
@@ -207,11 +270,21 @@ export function generateCss(
       --colour-accent: ${colours.accent};
       --colour-text: ${colours.text};
       --colour-cta: ${colours.cta};
-      --font-heading: '${headingFont}', sans-serif;
-      --font-body: '${bodyFont}', sans-serif;
-      --radius: ${borderRadius};
+      --font-heading: '${headingFont}', ${headingFallback};
+      --font-body: '${bodyFont}', ${bodyFallback};
+      --radius: ${cardRadius};
       --btn-radius: ${btnRadius};
+      --img-radius: ${imgRadius};
       --max-width: 1100px;
+      --section-padding: ${sectionPadding};
+      --hero-padding: ${heroPadding};
+      --card-padding: ${cardPadding};
+      --gap: ${gap};
+      --h1-size: ${h1Size};
+      --h2-size: ${h2Size};
+      --h3-size: ${h3Size};
+      --body-size: ${bodySize};
+      --tagline-size: ${taglineSize};
     }
 
     /* Reset */
@@ -222,6 +295,7 @@ export function generateCss(
       font-family: var(--font-body);
       color: var(--colour-text);
       background-color: var(--colour-bg);
+      font-size: var(--body-size);
       line-height: 1.7;
       -webkit-font-smoothing: antialiased;
     }
@@ -281,7 +355,7 @@ export function generateCss(
     .nav-toggle-icon::before { top: -7px; }
     .nav-toggle-icon::after { top: 7px; }
 
-    .nav-links { display: flex; gap: 1.5rem; align-items: center; }
+    .nav-links { display: flex; gap: var(--gap); align-items: center; }
     .nav-link {
       text-decoration: none; font-weight: 500; font-size: 0.95rem;
       color: var(--colour-text); transition: color 0.2s;
@@ -300,27 +374,27 @@ export function generateCss(
     }
 
     /* Sections */
-    .section { padding: 4rem 1.5rem; }
+    .section { padding: var(--section-padding); }
     .section-inner { max-width: var(--max-width); margin: 0 auto; }
     .section--alt { background: rgba(0,0,0,0.02); }
-    .section-title { font-size: 2rem; margin-bottom: 1.5rem; }
+    .section-title { font-size: var(--h2-size); margin-bottom: var(--gap); }
     .section-subtitle { font-size: 1.1rem; color: var(--colour-text); opacity: 0.8; margin-bottom: 2rem; }
 
     /* Hero */
-    .hero { padding: 5rem 1.5rem; text-align: center; }
+    .hero { padding: var(--hero-padding); text-align: center; }
     .hero-inner { max-width: var(--max-width); margin: 0 auto; }
-    .hero h1 { font-size: 2.5rem; margin-bottom: 1rem; }
-    .hero .tagline { font-size: 1.2rem; opacity: 0.85; margin-bottom: 2rem; max-width: 600px; margin-left: auto; margin-right: auto; }
+    .hero h1 { font-size: var(--h1-size); margin-bottom: 1rem; }
+    .hero .tagline { font-size: var(--tagline-size); opacity: 0.85; margin-bottom: 2rem; max-width: 600px; margin-left: auto; margin-right: auto; }
 
     @media (min-width: 769px) {
-      .hero h1 { font-size: 3.5rem; }
+      .hero h1 { font-size: calc(var(--h1-size) * 1.4); }
     }
 
     /* Buttons */
     .btn {
       display: inline-block; padding: 0.75rem 2rem;
       background: var(--colour-cta); color: #fff; text-decoration: none;
-      border-radius: var(--btn-radius); font-weight: 600; font-size: 1rem;
+      border-radius: var(--btn-radius); font-weight: 600; font-size: var(--body-size);
       border: none; cursor: pointer; transition: opacity 0.2s;
     }
     .btn:hover { opacity: 0.9; }
@@ -331,21 +405,21 @@ export function generateCss(
     .btn--outline:hover { background: var(--colour-cta); color: #fff; }
 
     /* Cards */
-    .cards { display: grid; gap: 1.5rem; }
+    .cards { display: grid; gap: var(--gap); }
     @media (min-width: 640px) { .cards { grid-template-columns: repeat(2, 1fr); } }
     @media (min-width: 900px) { .cards { grid-template-columns: repeat(3, 1fr); } }
     .card {
       background: #fff; border-radius: var(--radius);
-      padding: 2rem; border: 1px solid var(--colour-accent);
+      padding: var(--card-padding); border: 1px solid var(--colour-accent);
     }
-    .card h3 { margin-bottom: 0.75rem; font-size: 1.25rem; }
+    .card h3 { margin-bottom: 0.75rem; font-size: var(--h3-size); }
     .card p { margin-bottom: 1rem; }
     .card .price { font-weight: 600; color: var(--colour-primary); margin-bottom: 1rem; display: block; }
 
     /* Testimonials */
     .testimonial {
       background: #fff; border-left: 4px solid var(--colour-accent);
-      padding: 2rem; margin-bottom: 1.5rem; border-radius: var(--radius);
+      padding: var(--card-padding); margin-bottom: var(--gap); border-radius: var(--radius);
     }
     .testimonial blockquote { font-style: italic; font-size: 1.05rem; margin-bottom: 0.75rem; }
     .testimonial cite { font-style: normal; font-weight: 600; display: block; }
@@ -364,11 +438,11 @@ export function generateCss(
 
     /* Contact form */
     .contact-form { max-width: 600px; }
-    .form-group { margin-bottom: 1.5rem; }
+    .form-group { margin-bottom: var(--gap); }
     .form-group label { display: block; font-weight: 600; margin-bottom: 0.5rem; }
     .form-group input, .form-group textarea {
       width: 100%; padding: 0.75rem; border: 1px solid var(--colour-accent);
-      border-radius: var(--radius); font-family: var(--font-body); font-size: 1rem;
+      border-radius: var(--radius); font-family: var(--font-body); font-size: var(--body-size);
     }
     .form-group textarea { min-height: 150px; resize: vertical; }
     .form-group input:focus, .form-group textarea:focus {
@@ -383,8 +457,8 @@ export function generateCss(
     /* About page */
     .about-grid { display: grid; gap: 2rem; }
     @media (min-width: 769px) { .about-grid { grid-template-columns: 2fr 1fr; } }
-    .about-photo { border-radius: var(--radius); width: 100%; object-fit: cover; }
-    .qualifications { margin-top: 2rem; padding: 1.5rem; background: rgba(0,0,0,0.02); border-radius: var(--radius); }
+    .about-photo { border-radius: var(--img-radius); width: 100%; object-fit: cover; }
+    .qualifications { margin-top: 2rem; padding: var(--card-padding); background: rgba(0,0,0,0.02); border-radius: var(--radius); }
 
     /* Schema.org JSON-LD does not need styles */
 

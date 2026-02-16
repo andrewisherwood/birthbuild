@@ -115,22 +115,27 @@ export function generateSite(
 ): GeneratedSite {
   // 1. Resolve palette (validate hex if custom, fallback to sage_sand on invalid)
   let resolvedColours: CustomColours;
-  if (spec.palette === "custom" && spec.custom_colours) {
+  let headingFontForWordmark: string;
+
+  if (spec.design) {
+    // Use advanced design config colours and font
+    resolvedColours = spec.design.colours;
+    headingFontForWordmark = spec.design.typography.headingFont;
+  } else if (spec.palette === "custom" && spec.custom_colours) {
     const validated = validateCustomColours(spec.custom_colours);
     resolvedColours = validated
       ? getPaletteColours("custom", validated)
       : getPaletteColours("sage_sand", null);
+    headingFontForWordmark = TYPOGRAPHY_CONFIG[spec.typography].heading;
   } else {
     resolvedColours = getPaletteColours(spec.palette, spec.custom_colours);
+    headingFontForWordmark = TYPOGRAPHY_CONFIG[spec.typography].heading;
   }
 
-  // 2. Resolve typography
-  const typography = TYPOGRAPHY_CONFIG[spec.typography];
-
-  // 3. Generate wordmark SVG
+  // 2. Generate wordmark SVG
   const wordmark = generateWordmark(
     spec.business_name ?? "My Site",
-    typography.heading,
+    headingFontForWordmark,
     resolvedColours.primary,
     spec.style,
   );

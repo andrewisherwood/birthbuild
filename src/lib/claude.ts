@@ -47,8 +47,15 @@ export interface ClaudeToolDefinition {
 // API call
 // ---------------------------------------------------------------------------
 
+import type { DesignConfig } from "@/types/site-spec";
+
 interface SendChatMessageParams {
   messages: Array<{ role: string; content: string }>;
+}
+
+interface SendDesignChatMessageParams {
+  messages: Array<{ role: string; content: string }>;
+  currentDesign: DesignConfig;
 }
 
 export async function sendChatMessage({
@@ -70,6 +77,38 @@ export async function sendChatMessage({
   }
 
   // The Edge Function returns the Claude response JSON directly
+  const response = data as ClaudeResponse | undefined;
+
+  if (!response || !response.content) {
+    throw new Error("Received an empty response from the assistant. Please try again.");
+  }
+
+  return response;
+}
+
+// ---------------------------------------------------------------------------
+// Design chat API call
+// ---------------------------------------------------------------------------
+
+export async function sendDesignChatMessage({
+  messages,
+  currentDesign,
+}: SendDesignChatMessageParams): Promise<ClaudeResponse> {
+  const { data, error } = await supabase.functions.invoke("design-chat", {
+    body: {
+      messages,
+      current_design: currentDesign,
+    },
+  });
+
+  if (error) {
+    const message =
+      typeof error === "object" && error !== null && "message" in error
+        ? (error as { message: string }).message
+        : "Something went wrong. Please try again.";
+    throw new Error(message);
+  }
+
   const response = data as ClaudeResponse | undefined;
 
   if (!response || !response.content) {

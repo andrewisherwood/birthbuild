@@ -42,6 +42,35 @@ export type PaletteOption =
   | "custom";
 export type TypographyOption = "modern" | "classic" | "mixed";
 
+// ---------------------------------------------------------------------------
+// Design config (advanced design editor overrides)
+// ---------------------------------------------------------------------------
+
+export interface DesignColours {
+  primary: string;
+  background: string;
+  accent: string;
+  text: string;
+  cta: string;
+}
+
+export type SpacingDensity = "compact" | "default" | "relaxed" | "spacious";
+export type BorderRadiusOption = "sharp" | "slightly-rounded" | "rounded" | "circular";
+export type TypographyScale = "small" | "default" | "large";
+
+export interface DesignTypography {
+  headingFont: string;
+  bodyFont: string;
+  scale: TypographyScale;
+}
+
+export interface DesignConfig {
+  colours: DesignColours;
+  typography: DesignTypography;
+  spacing: { density: SpacingDensity };
+  borderRadius: BorderRadiusOption;
+}
+
 export type ChatStep =
   | "welcome"
   | "basics"
@@ -92,6 +121,9 @@ export interface SiteSpec {
   typography: TypographyOption;
   font_heading: string | null;
   font_body: string | null;
+
+  // Advanced design overrides (null = use base fields)
+  design: DesignConfig | null;
 
   // Accreditation
   doula_uk: boolean;

@@ -113,3 +113,29 @@ _(Entries added by Security Agent via /security-audit skill)_
 - `TODO.*security`
 - `FIXME.*auth`
 - `HACK`
+
+### Scan — 016135c (2026-02-16T13:00:14Z)
+
+**Commit:** `016135c` | **Files scanned:** 6 | **Findings:** 2
+
+- **CRITICAL** `SUPABASE_SERVICE_ROLE_KEY` — supabase/functions/invite/index.ts:133
+
+
+### Scan — dadef1f (2026-02-16T13:36:35Z)
+
+**Commit:** `dadef1f` | **Files scanned:** 30 | **Findings:** 6
+
+- **CRITICAL** `SUPABASE_SERVICE_ROLE_KEY` — supabase/functions/build/index.ts:362
+- **CRITICAL** `SUPABASE_SERVICE_ROLE_KEY` — supabase/functions/chat/index.ts:373
+- **CRITICAL** `SUPABASE_SERVICE_ROLE_KEY` — supabase/functions/delete-site/index.ts:80
+- **CRITICAL** `SUPABASE_SERVICE_ROLE_KEY` — supabase/functions/publish/index.ts:109
+- **HIGH** `exec(` — src/hooks/useChat.ts:66
+
+
+### Scan — 61b1058 (2026-02-16T13:46:01Z)
+
+**Commit:** `61b1058` | **Files scanned:** 8 | **Findings:** 3
+
+- **CRITICAL** `SUPABASE_SERVICE_ROLE_KEY` — supabase/functions/build/index.ts:362
+- **CRITICAL** `SUPABASE_SERVICE_ROLE_KEY` — supabase/functions/publish/index.ts:109
+

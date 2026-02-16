@@ -77,29 +77,17 @@ export function useAuth(): UseAuthReturn {
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (event, newSession) => {
+    } = supabase.auth.onAuthStateChange(async (_event, newSession) => {
       if (!mounted) return;
 
-      // Skip redundant updates from token refreshes — the user identity hasn't
-      // changed, so avoid cascading re-renders that flash a loading spinner.
-      const newUserId = newSession?.user?.id ?? null;
-      setSession((prev) => {
-        if (prev?.access_token === newSession?.access_token) return prev;
-        return newSession;
-      });
-      setUser((prev) => {
-        if (prev?.id === newUserId) return prev;
-        return newSession?.user ?? null;
-      });
+      setSession(newSession);
+      setUser(newSession?.user ?? null);
 
       if (newSession?.user) {
-        // Only re-fetch profile on sign-in, not on every token refresh.
-        if (event === "SIGNED_IN" || event === "INITIAL_SESSION") {
-          const userProfile = await fetchProfile(newSession.user.id);
-          if (!mounted) return;
-          setProfile(userProfile);
-          setRole(userProfile?.role ?? null);
-        }
+        const userProfile = await fetchProfile(newSession.user.id);
+        if (!mounted) return;
+        setProfile(userProfile);
+        setRole(userProfile?.role ?? null);
       } else {
         setProfile(null);
         setRole(null);

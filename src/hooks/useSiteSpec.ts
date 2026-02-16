@@ -23,12 +23,16 @@ export function useSiteSpec(siteId?: string): UseSiteSpecReturn {
   // If the spec is later edited (updated_at advances), the build is stale.
   const lastBuildUpdatedAtRef = useRef<string | null>(null);
 
+  // Stabilise dependency: only re-fetch when identity changes, not on every
+  // token refresh (which creates a new user object reference on visibility change).
+  const userId = user?.id ?? null;
+
   // Fetch the current user's site spec on mount
   useEffect(() => {
     let mounted = true;
 
     async function fetchSiteSpec() {
-      if (!user) {
+      if (!userId) {
         setLoading(false);
         return;
       }
@@ -39,7 +43,7 @@ export function useSiteSpec(siteId?: string): UseSiteSpecReturn {
       // When siteId is provided (instructor multi-site), fetch by ID + user_id.
       // Otherwise, fetch the latest spec for the current user.
       // Both paths scope by user_id so we don't rely solely on RLS.
-      let query = supabase.from("site_specs").select("*").eq("user_id", user.id);
+      let query = supabase.from("site_specs").select("*").eq("user_id", userId);
       if (siteId) {
         query = query.eq("id", siteId);
       } else {
@@ -64,7 +68,7 @@ export function useSiteSpec(siteId?: string): UseSiteSpecReturn {
     return () => {
       mounted = false;
     };
-  }, [user, siteId]);
+  }, [userId, siteId]);
 
   // Record the updated_at timestamp when a build starts (status -> building)
   // or when the site first loads as "live". This lets us detect edits after build.

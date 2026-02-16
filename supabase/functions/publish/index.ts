@@ -322,6 +322,16 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
     if (updateError) {
       console.error("[publish] DB update failed:", updateError.message);
+      return new Response(
+        JSON.stringify({
+          error:
+            "Site was published on Netlify but the database update failed. Please try again or contact support.",
+        }),
+        {
+          status: 500,
+          headers: { ...cors, "Content-Type": "application/json" },
+        },
+      );
     }
 
     return new Response(
@@ -400,6 +410,16 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
   if (updateError) {
     console.error("[publish] DB update failed:", updateError.message);
+    return new Response(
+      JSON.stringify({
+        error:
+          "Site was unpublished on Netlify but the database update failed. Please try again or contact support.",
+      }),
+      {
+        status: 500,
+        headers: { ...cors, "Content-Type": "application/json" },
+      },
+    );
   }
 
   return new Response(JSON.stringify({ success: true }), {

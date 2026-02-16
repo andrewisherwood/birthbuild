@@ -109,7 +109,7 @@ export function PhotoUploadPanel({ siteSpecId, onDone }: PhotoUploadPanelProps) 
       </div>
 
       <div className="mt-4 flex justify-end">
-        <Button variant="primary" size="sm" onClick={onDone}>
+        <Button variant="primary" size="sm" onClick={onDone} disabled={uploading}>
           Done with photos
         </Button>
       </div>

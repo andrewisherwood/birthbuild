@@ -15,14 +15,17 @@ import type { SiteSpec } from "@/types/site-spec";
 interface SiteActionsProps {
   site: SiteSpec;
   onDelete: (siteId: string) => void;
+  onPublishComplete: () => void;
 }
 
-function SiteActions({ site, onDelete }: SiteActionsProps) {
+function SiteActions({ site, onDelete, onPublishComplete }: SiteActionsProps) {
   const navigate = useNavigate();
-  const { publishing, publish, unpublish } = usePublish(site);
+  const { publishing, publishError, publish, unpublish } = usePublish(site, {
+    onComplete: onPublishComplete,
+  });
 
   return (
-    <div className="flex flex-wrap gap-2">
+    <div className="flex flex-wrap items-center gap-2">
       <button
         type="button"
         onClick={() => navigate(`/dashboard?site_id=${site.id}`)}
@@ -65,6 +68,9 @@ function SiteActions({ site, onDelete }: SiteActionsProps) {
       >
         Delete
       </button>
+      {publishError && (
+        <span className="text-xs text-red-600">{publishError}</span>
+      )}
     </div>
   );
 }
@@ -75,7 +81,7 @@ function SiteActions({ site, onDelete }: SiteActionsProps) {
 
 export default function AdminSitesPage() {
   const navigate = useNavigate();
-  const { sites, loading, error, createSite, deleteSite } =
+  const { sites, loading, error, createSite, deleteSite, refetch } =
     useInstructorSites();
 
   async function handleCreate() {
@@ -201,7 +207,7 @@ export default function AdminSitesPage() {
                       </div>
                     </td>
                     <td className="whitespace-nowrap px-6 py-4 text-right">
-                      <SiteActions site={site} onDelete={deleteSite} />
+                      <SiteActions site={site} onDelete={deleteSite} onPublishComplete={() => void refetch()} />
                     </td>
                   </tr>
                 ))}
@@ -254,7 +260,7 @@ export default function AdminSitesPage() {
               </div>
 
               <div className="mt-3">
-                <SiteActions site={site} onDelete={deleteSite} />
+                <SiteActions site={site} onDelete={deleteSite} onPublishComplete={() => void refetch()} />
               </div>
             </Card>
           ))}

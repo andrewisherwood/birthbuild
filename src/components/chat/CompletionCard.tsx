@@ -4,12 +4,15 @@ import type { SiteSpec } from "@/types/site-spec";
 
 interface CompletionCardProps {
   siteSpec: SiteSpec;
+  siteId?: string;
   onNavigate: (path: string) => void;
 }
 
-export function CompletionCard({ siteSpec, onNavigate }: CompletionCardProps) {
+export function CompletionCard({ siteSpec, siteId, onNavigate }: CompletionCardProps) {
   const servicesCount = siteSpec.services?.length ?? 0;
   const hasContact = Boolean(siteSpec.email || siteSpec.phone);
+  const siteIdParam = siteId ? `&site_id=${siteId}` : "";
+  const dashboardBase = siteId ? `/dashboard?site_id=${siteId}` : "/dashboard";
 
   return (
     <div className="mx-auto max-w-2xl">
@@ -57,7 +60,9 @@ export function CompletionCard({ siteSpec, onNavigate }: CompletionCardProps) {
               Services
             </p>
             <p className="mt-1 text-sm font-medium text-gray-900">
-              {servicesCount > 0 ? `${servicesCount} service(s)` : "None yet"}
+              {servicesCount > 0
+                ? `${servicesCount} ${servicesCount === 1 ? "service" : "services"}`
+                : "None yet"}
             </p>
           </div>
           <div className="rounded-md border border-gray-100 bg-gray-50 p-3">
@@ -66,7 +71,7 @@ export function CompletionCard({ siteSpec, onNavigate }: CompletionCardProps) {
             </p>
             <p className="mt-1 text-sm font-medium text-gray-900">
               {siteSpec.style ?? "Not set"} /{" "}
-              {siteSpec.palette?.replace("_", " ") ?? "Not set"}
+              {siteSpec.palette?.replace(/_/g, " ") ?? "Not set"}
             </p>
           </div>
           <div className="rounded-md border border-gray-100 bg-gray-50 p-3">
@@ -83,11 +88,11 @@ export function CompletionCard({ siteSpec, onNavigate }: CompletionCardProps) {
         <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:justify-center">
           <Button
             variant="secondary"
-            onClick={() => onNavigate("/dashboard?tab=photos")}
+            onClick={() => onNavigate(`/dashboard?tab=photos${siteIdParam}`)}
           >
             Upload Photos
           </Button>
-          <Button onClick={() => onNavigate("/dashboard")}>
+          <Button onClick={() => onNavigate(dashboardBase)}>
             Go to Dashboard
           </Button>
         </div>

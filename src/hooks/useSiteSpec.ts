@@ -35,13 +35,14 @@ export function useSiteSpec(siteId?: string): UseSiteSpecReturn {
       setLoading(true);
       setError(null);
 
-      // When siteId is provided (instructor multi-site), fetch by ID.
+      // When siteId is provided (instructor multi-site), fetch by ID + user_id.
       // Otherwise, fetch the latest spec for the current user.
-      let query = supabase.from("site_specs").select("*");
+      // Both paths scope by user_id so we don't rely solely on RLS.
+      let query = supabase.from("site_specs").select("*").eq("user_id", user.id);
       if (siteId) {
         query = query.eq("id", siteId);
       } else {
-        query = query.eq("user_id", user.id).order("created_at", { ascending: false }).limit(1);
+        query = query.order("created_at", { ascending: false }).limit(1);
       }
       const { data, error: fetchError } = await query.maybeSingle();
 

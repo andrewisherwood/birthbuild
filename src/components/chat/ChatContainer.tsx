@@ -115,7 +115,7 @@ export function ChatContainer({
           {/* Completion card (shown when all steps are done) */}
           {isComplete && siteSpec && onNavigate && (
             <div className="mt-4">
-              <CompletionCard siteSpec={siteSpec} onNavigate={onNavigate} />
+              <CompletionCard siteSpec={siteSpec} siteId={siteSpecId} onNavigate={onNavigate} />
             </div>
           )}
         </div>

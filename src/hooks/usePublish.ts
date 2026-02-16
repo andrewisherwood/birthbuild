@@ -2,6 +2,10 @@ import { useState, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
 import type { SiteSpec } from "@/types/site-spec";
 
+interface UsePublishOptions {
+  onComplete?: () => void;
+}
+
 interface UsePublishReturn {
   publishing: boolean;
   publishError: string | null;
@@ -9,7 +13,7 @@ interface UsePublishReturn {
   unpublish: () => Promise<void>;
 }
 
-export function usePublish(siteSpec: SiteSpec | null): UsePublishReturn {
+export function usePublish(siteSpec: SiteSpec | null, options?: UsePublishOptions): UsePublishReturn {
   const [publishing, setPublishing] = useState(false);
   const [publishError, setPublishError] = useState<string | null>(null);
 
@@ -40,6 +44,8 @@ export function usePublish(siteSpec: SiteSpec | null): UsePublishReturn {
       const response = data as { success?: boolean; error?: string } | undefined;
       if (response?.error) {
         setPublishError(response.error);
+      } else {
+        options?.onComplete?.();
       }
     } catch (err: unknown) {
       const message =
@@ -48,7 +54,7 @@ export function usePublish(siteSpec: SiteSpec | null): UsePublishReturn {
     } finally {
       setPublishing(false);
     }
-  }, [siteSpec]);
+  }, [siteSpec, options]);
 
   const unpublish = useCallback(async () => {
     if (!siteSpec) {
@@ -77,6 +83,8 @@ export function usePublish(siteSpec: SiteSpec | null): UsePublishReturn {
       const response = data as { success?: boolean; error?: string } | undefined;
       if (response?.error) {
         setPublishError(response.error);
+      } else {
+        options?.onComplete?.();
       }
     } catch (err: unknown) {
       const message =
@@ -85,7 +93,7 @@ export function usePublish(siteSpec: SiteSpec | null): UsePublishReturn {
     } finally {
       setPublishing(false);
     }
-  }, [siteSpec]);
+  }, [siteSpec, options]);
 
   return {
     publishing,

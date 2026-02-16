@@ -761,9 +761,12 @@ Deno.serve(async (req: Request): Promise<Response> => {
     updated_at: new Date().toISOString(),
   };
 
-  // Only set deploy_url if the site was already live (preserve existing custom domain URL)
+  // If the site was already live, preserve the existing custom domain URL.
+  // Otherwise, explicitly clear deploy_url so any stale value is removed.
   if (preBuildStatus === "live" && siteSpec.deploy_url) {
     updateFields.deploy_url = siteSpec.deploy_url;
+  } else {
+    updateFields.deploy_url = null;
   }
 
   const { error: updateError } = await serviceClient

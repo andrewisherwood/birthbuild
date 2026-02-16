@@ -27,6 +27,14 @@ export function useSiteSpec(siteId?: string): UseSiteSpecReturn {
   // token refresh (which creates a new user object reference on visibility change).
   const userId = user?.id ?? null;
 
+  // Hard backstop: if loading hasn't resolved within 10 seconds, force it off
+  // so the UI is never stuck on a spinner.
+  useEffect(() => {
+    if (!loading) return;
+    const id = setTimeout(() => setLoading(false), 10_000);
+    return () => clearTimeout(id);
+  }, [loading]);
+
   // Fetch the current user's site spec on mount
   useEffect(() => {
     let mounted = true;

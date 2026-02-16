@@ -14,12 +14,13 @@ interface UseSessionsReturn {
 
 export function useSessions(): UseSessionsReturn {
   const { profile } = useAuth();
+  const tenantId = profile?.tenant_id ?? null;
   const [sessions, setSessions] = useState<SessionWithCounts[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const fetchSessions = useCallback(async () => {
-    if (!profile?.tenant_id) {
+    if (!tenantId) {
       setLoading(false);
       return;
     }
@@ -27,68 +28,72 @@ export function useSessions(): UseSessionsReturn {
     setLoading(true);
     setError(null);
 
-    // Fetch sessions
-    const { data: sessionData, error: fetchError } = await supabase
-      .from("sessions")
-      .select("*")
-      .eq("tenant_id", profile.tenant_id)
-      .order("created_at", { ascending: false });
+    try {
+      // Fetch sessions
+      const { data: sessionData, error: fetchError } = await supabase
+        .from("sessions")
+        .select("*")
+        .eq("tenant_id", tenantId)
+        .order("created_at", { ascending: false });
 
-    if (fetchError) {
+      if (fetchError) {
+        setError("Failed to load sessions. Please try again.");
+        return;
+      }
+
+      const rawSessions = (sessionData ?? []) as Session[];
+
+      // Fetch student counts per session
+      const { data: profiles } = await supabase
+        .from("profiles")
+        .select("session_id")
+        .eq("tenant_id", tenantId)
+        .eq("role", "student");
+
+      // Fetch live site counts per session
+      const { data: siteSpecs } = await supabase
+        .from("site_specs")
+        .select("session_id, status")
+        .eq("tenant_id", tenantId);
+
+      const studentCountMap = new Map<string, number>();
+      const liveCountMap = new Map<string, number>();
+
+      if (profiles) {
+        for (const p of profiles) {
+          if (p.session_id) {
+            studentCountMap.set(
+              p.session_id,
+              (studentCountMap.get(p.session_id) ?? 0) + 1,
+            );
+          }
+        }
+      }
+
+      if (siteSpecs) {
+        for (const spec of siteSpecs as Array<{ session_id: string | null; status: string }>) {
+          if (spec.session_id && spec.status === "live") {
+            liveCountMap.set(
+              spec.session_id,
+              (liveCountMap.get(spec.session_id) ?? 0) + 1,
+            );
+          }
+        }
+      }
+
+      const sessionsWithCounts: SessionWithCounts[] = rawSessions.map((s) => ({
+        ...s,
+        student_count: studentCountMap.get(s.id) ?? 0,
+        live_site_count: liveCountMap.get(s.id) ?? 0,
+      }));
+
+      setSessions(sessionsWithCounts);
+    } catch {
       setError("Failed to load sessions. Please try again.");
+    } finally {
       setLoading(false);
-      return;
     }
-
-    const rawSessions = (sessionData ?? []) as Session[];
-
-    // Fetch student counts per session
-    const { data: profiles } = await supabase
-      .from("profiles")
-      .select("session_id")
-      .eq("tenant_id", profile.tenant_id)
-      .eq("role", "student");
-
-    // Fetch live site counts per session
-    const { data: siteSpecs } = await supabase
-      .from("site_specs")
-      .select("session_id, status")
-      .eq("tenant_id", profile.tenant_id);
-
-    const studentCountMap = new Map<string, number>();
-    const liveCountMap = new Map<string, number>();
-
-    if (profiles) {
-      for (const p of profiles) {
-        if (p.session_id) {
-          studentCountMap.set(
-            p.session_id,
-            (studentCountMap.get(p.session_id) ?? 0) + 1,
-          );
-        }
-      }
-    }
-
-    if (siteSpecs) {
-      for (const spec of siteSpecs as Array<{ session_id: string | null; status: string }>) {
-        if (spec.session_id && spec.status === "live") {
-          liveCountMap.set(
-            spec.session_id,
-            (liveCountMap.get(spec.session_id) ?? 0) + 1,
-          );
-        }
-      }
-    }
-
-    const sessionsWithCounts: SessionWithCounts[] = rawSessions.map((s) => ({
-      ...s,
-      student_count: studentCountMap.get(s.id) ?? 0,
-      live_site_count: liveCountMap.get(s.id) ?? 0,
-    }));
-
-    setSessions(sessionsWithCounts);
-    setLoading(false);
-  }, [profile?.tenant_id]);
+  }, [tenantId]);
 
   useEffect(() => {
     void fetchSessions();
@@ -96,7 +101,7 @@ export function useSessions(): UseSessionsReturn {
 
   const createSession = useCallback(
     async (name: string) => {
-      if (!profile?.tenant_id) {
+      if (!tenantId) {
         setError("No tenant found. Please contact your administrator.");
         return;
       }
@@ -106,7 +111,7 @@ export function useSessions(): UseSessionsReturn {
       const { data, error: createError } = await supabase
         .from("sessions")
         .insert({
-          tenant_id: profile.tenant_id,
+          tenant_id: tenantId,
           name,
           status: "active",
         })
@@ -126,7 +131,7 @@ export function useSessions(): UseSessionsReturn {
 
       setSessions((prev) => [newSession, ...prev]);
     },
-    [profile?.tenant_id],
+    [tenantId],
   );
 
   const archiveSession = useCallback(

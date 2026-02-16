@@ -44,9 +44,9 @@ export default function IndexPage() {
 
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center">
-        <LoadingSpinner />
-      </div>
+      <main className="flex min-h-screen items-center justify-center">
+        <LoadingSpinner className="h-8 w-8" />
+      </main>
     );
   }
 

@@ -1,0 +1,172 @@
+import { createContext, useContext, useState, useEffect, useCallback, useMemo } from "react";
+import type { ReactNode } from "react";
+import type { User, Session } from "@supabase/supabase-js";
+import { supabase } from "@/lib/supabase";
+import type { Profile } from "@/types/database";
+
+type UserRole = Profile["role"] | null;
+
+interface AuthState {
+  user: User | null;
+  session: Session | null;
+  profile: Profile | null;
+  role: UserRole;
+  loading: boolean;
+}
+
+interface AuthActions {
+  signInWithMagicLink: (email: string) => Promise<{ error: string | null }>;
+  signOut: () => Promise<void>;
+}
+
+type AuthContextValue = AuthState & AuthActions;
+
+const AuthContext = createContext<AuthContextValue | null>(null);
+
+async function fetchProfile(userId: string): Promise<Profile | null> {
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("*")
+    .eq("id", userId)
+    .single();
+
+  if (error) {
+    // Profile may not exist yet (first-time user before profile creation).
+    // SEC-004: Do not log Supabase error details to the console.
+    return null;
+  }
+
+  return data as Profile;
+}
+
+interface AuthProviderProps {
+  children: ReactNode;
+}
+
+export function AuthProvider({ children }: AuthProviderProps) {
+  const [user, setUser] = useState<User | null>(null);
+  const [session, setSession] = useState<Session | null>(null);
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [role, setRole] = useState<UserRole>(null);
+  const [loading, setLoading] = useState(true);
+
+  // Hard backstop: if loading hasn't resolved within 3 seconds (for any
+  // reason — hung getSession, lock contention, unexpected error), force it
+  // off so the UI is never stuck on a spinner.
+  useEffect(() => {
+    if (!loading) return;
+    const id = setTimeout(() => setLoading(false), 3_000);
+    return () => clearTimeout(id);
+  }, [loading]);
+
+  useEffect(() => {
+    let mounted = true;
+
+    // Use onAuthStateChange as the sole session source.
+    // INITIAL_SESSION fires after the client has fully initialised
+    // (including hash-token processing for magic-link redirects).
+    // This avoids a redundant getSession() call that can race with
+    // onAuthStateChange's own internal session initialisation.
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange(async (event, newSession) => {
+      if (!mounted) return;
+
+      if (event === "SIGNED_OUT") {
+        setSession(null);
+        setUser(null);
+        setProfile(null);
+        setRole(null);
+        setLoading(false);
+        return;
+      }
+
+      // INITIAL_SESSION, SIGNED_IN, TOKEN_REFRESHED, etc.
+      // Collect profile data before updating state so React batches
+      // everything into a single re-render.
+      let newProfile: Profile | null = null;
+      let newRole: UserRole = null;
+
+      if (newSession?.user) {
+        try {
+          newProfile = await fetchProfile(newSession.user.id);
+          newRole = newProfile?.role ?? null;
+        } catch {
+          // Profile fetch failed — continue without profile.
+        }
+      }
+
+      if (!mounted) return;
+
+      setSession(newSession);
+      setUser(newSession?.user ?? null);
+      setProfile(newProfile);
+      setRole(newRole);
+      setLoading(false);
+    });
+
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
+  }, []);
+
+  const signInWithMagicLink = useCallback(
+    async (email: string): Promise<{ error: string | null }> => {
+      const { error } = await supabase.auth.signInWithOtp({
+        email,
+        options: {
+          emailRedirectTo: window.location.origin,
+        },
+      });
+
+      if (error) {
+        // SEC-004: Return a generic error message instead of leaking Supabase error details.
+        return { error: "Unable to send magic link. Please try again." };
+      }
+
+      return { error: null };
+    },
+    [],
+  );
+
+  const signOut = useCallback(async () => {
+    // Always clear client state, even if the server call fails.
+    // A failed signOut must never leave the user in a ghost session
+    // where the server session is cleared but the UI still shows as
+    // authenticated (causing RLS to block every subsequent query).
+    try {
+      await supabase.auth.signOut();
+    } catch {
+      // Server call failed — clear local state anyway.
+    }
+    setUser(null);
+    setSession(null);
+    setProfile(null);
+    setRole(null);
+    setLoading(false);
+  }, []);
+
+  const value = useMemo<AuthContextValue>(
+    () => ({
+      user,
+      session,
+      profile,
+      role,
+      loading,
+      signInWithMagicLink,
+      signOut,
+    }),
+    [user, session, profile, role, loading, signInWithMagicLink, signOut],
+  );
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+}
+
+export function useAuth(): AuthContextValue {
+  const context = useContext(AuthContext);
+  if (!context) {
+    throw new Error("useAuth must be used within an AuthProvider");
+  }
+  return context;
+}

@@ -2,6 +2,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
 import { App } from "@/App";
+import { AuthProvider } from "@/hooks/useAuth";
 import { supabaseMissing } from "@/lib/supabase";
 import "@/styles/globals.css";
 
@@ -31,14 +32,31 @@ VITE_SUPABASE_ANON_KEY=your-anon-key`}
   );
 }
 
-createRoot(rootElement).render(
+const tree = (
   <StrictMode>
     {supabaseMissing ? (
       <MissingEnvScreen />
     ) : (
       <BrowserRouter>
-        <App />
+        <AuthProvider>
+          <App />
+        </AuthProvider>
       </BrowserRouter>
     )}
-  </StrictMode>,
+  </StrictMode>
 );
+
+// Guard against Vite HMR re-evaluating this module and calling createRoot()
+// a second time on the same container. Reuse the existing root if present.
+declare global {
+  interface Window {
+    __birthbuild_root?: ReturnType<typeof createRoot>;
+  }
+}
+
+if (window.__birthbuild_root) {
+  window.__birthbuild_root.render(tree);
+} else {
+  window.__birthbuild_root = createRoot(rootElement);
+  window.__birthbuild_root.render(tree);
+}

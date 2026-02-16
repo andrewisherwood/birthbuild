@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
+import { useAuth } from "@/hooks/useAuth";
 import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
+import { Button } from "@/components/ui/Button";
 import { TabNav } from "@/components/dashboard/TabNav";
 import { ProgressIndicator } from "@/components/dashboard/ProgressIndicator";
 import type { TabKey } from "@/components/dashboard/TabNav";
@@ -23,6 +25,7 @@ export function DashboardShell({
   children,
   backLink,
 }: DashboardShellProps) {
+  const { signOut } = useAuth();
   const [searchParams] = useSearchParams();
   const tabParam = searchParams.get("tab") as TabKey | null;
   const initialTab = tabParam && VALID_TABS.includes(tabParam) ? tabParam : "business";
@@ -79,6 +82,9 @@ export function DashboardShell({
             >
               Back to chat
             </Link>
+            <Button variant="outline" size="sm" onClick={signOut}>
+              Sign out
+            </Button>
           </div>
         </div>
       </header>

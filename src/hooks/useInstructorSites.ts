@@ -14,12 +14,14 @@ interface UseInstructorSitesReturn {
 
 export function useInstructorSites(): UseInstructorSitesReturn {
   const { user, profile } = useAuth();
+  const userId = user?.id ?? null;
+  const tenantId = profile?.tenant_id ?? null;
   const [sites, setSites] = useState<SiteSpec[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const fetchSites = useCallback(async () => {
-    if (!user) {
+    if (!userId) {
       setLoading(false);
       return;
     }
@@ -27,28 +29,32 @@ export function useInstructorSites(): UseInstructorSitesReturn {
     setLoading(true);
     setError(null);
 
-    const { data, error: fetchError } = await supabase
-      .from("site_specs")
-      .select("*")
-      .eq("user_id", user.id)
-      .order("created_at", { ascending: false });
+    try {
+      const { data, error: fetchError } = await supabase
+        .from("site_specs")
+        .select("*")
+        .eq("user_id", userId)
+        .order("created_at", { ascending: false });
 
-    if (fetchError) {
-      setError(fetchError.message);
+      if (fetchError) {
+        setError(fetchError.message);
+        return;
+      }
+
+      setSites((data as SiteSpec[]) ?? []);
+    } catch {
+      setError("Failed to load sites. Please try again.");
+    } finally {
       setLoading(false);
-      return;
     }
-
-    setSites((data as SiteSpec[]) ?? []);
-    setLoading(false);
-  }, [user]);
+  }, [userId]);
 
   useEffect(() => {
     void fetchSites();
   }, [fetchSites]);
 
   const createSite = useCallback(async (): Promise<SiteSpec | null> => {
-    if (!user) {
+    if (!userId) {
       setError("Must be authenticated to create a site.");
       return null;
     }
@@ -56,8 +62,8 @@ export function useInstructorSites(): UseInstructorSitesReturn {
     setError(null);
 
     const newSpec = {
-      user_id: user.id,
-      tenant_id: profile?.tenant_id ?? null,
+      user_id: userId,
+      tenant_id: tenantId,
       session_id: null,
       status: "draft" as const,
     };
@@ -76,7 +82,7 @@ export function useInstructorSites(): UseInstructorSitesReturn {
     const created = data as SiteSpec;
     setSites((prev) => [created, ...prev]);
     return created;
-  }, [user, profile]);
+  }, [userId, tenantId]);
 
   const deleteSite = useCallback(async (siteId: string) => {
     setError(null);

@@ -27,11 +27,19 @@ interface UsePhotoUploadReturn {
 
 export function usePhotoUpload(siteSpecId: string | null): UsePhotoUploadReturn {
   const { user } = useAuth();
+  const userId = user?.id ?? null;
   const [photos, setPhotos] = useState<Photo[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [photoUrls, setPhotoUrls] = useState<Record<string, string>>({});
+
+  // Hard backstop: never let the spinner hang indefinitely.
+  useEffect(() => {
+    if (!loading) return;
+    const id = setTimeout(() => setLoading(false), 10_000);
+    return () => clearTimeout(id);
+  }, [loading]);
 
   // Generate signed URLs for a list of storage paths (private bucket)
   const generateSignedUrls = useCallback(
@@ -120,7 +128,7 @@ export function usePhotoUpload(siteSpecId: string | null): UsePhotoUploadReturn 
 
   const uploadPhoto = useCallback(
     async (file: File, purpose: string, altText: string): Promise<Photo | null> => {
-      if (!user || !siteSpecId) {
+      if (!userId || !siteSpecId) {
         setError("You must be signed in with an active site specification.");
         return null;
       }
@@ -146,7 +154,7 @@ export function usePhotoUpload(siteSpecId: string | null): UsePhotoUploadReturn 
         setUploading(false);
         return null;
       }
-      const storagePath = `photos/${user.id}/${purpose}-${Date.now()}.${ext}`;
+      const storagePath = `photos/${userId}/${purpose}-${Date.now()}.${ext}`;
 
       // Upload to Supabase Storage
       const { error: uploadError } = await supabase.storage
@@ -195,7 +203,7 @@ export function usePhotoUpload(siteSpecId: string | null): UsePhotoUploadReturn 
       setUploading(false);
       return newPhoto;
     },
-    [user, siteSpecId, photos.length, generateSignedUrls],
+    [userId, siteSpecId, photos.length, generateSignedUrls],
   );
 
   const deletePhoto = useCallback(
@@ -203,7 +211,7 @@ export function usePhotoUpload(siteSpecId: string | null): UsePhotoUploadReturn 
       setError(null);
 
       // SEC-014: Verify the storage path belongs to the current user before deleting
-      if (!user || !storagePath.startsWith(`photos/${user.id}/`)) {
+      if (!userId || !storagePath.startsWith(`photos/${userId}/`)) {
         setError("Invalid storage path.");
         return;
       }
@@ -224,7 +232,7 @@ export function usePhotoUpload(siteSpecId: string | null): UsePhotoUploadReturn 
 
       setPhotos((prev) => prev.filter((p) => p.id !== photoId));
     },
-    [user],
+    [userId],
   );
 
   const updatePhotoAltText = useCallback(

@@ -67,10 +67,11 @@ export interface StudentOverview {
   session_id: string | null;
   site_spec: {
     id: string;
-    status: "draft" | "building" | "live" | "error";
+    status: "draft" | "building" | "preview" | "live" | "error";
     business_name: string | null;
     doula_name: string | null;
     deploy_url: string | null;
+    preview_url: string | null;
     completion_percent: number;
   } | null;
 }

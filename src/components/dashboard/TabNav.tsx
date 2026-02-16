@@ -48,7 +48,7 @@ function isTabComplete(tab: TabKey, siteSpec: SiteSpec): boolean {
     case "seo":
       return Boolean(siteSpec.primary_keyword);
     case "preview":
-      return siteSpec.status === "live";
+      return siteSpec.status === "live" || siteSpec.status === "preview";
     default:
       return false;
   }

@@ -6,10 +6,12 @@
  */
 
 import { useRef, useEffect } from "react";
-import type { ChatMessage, ChatStep } from "@/types/site-spec";
+import type { ChatMessage, ChatStep, SiteSpec } from "@/types/site-spec";
 import { StepIndicator } from "@/components/chat/StepIndicator";
 import { MessageBubble } from "@/components/chat/MessageBubble";
 import { ChatInput } from "@/components/chat/ChatInput";
+import { CompletionCard } from "@/components/chat/CompletionCard";
+import { PhotoUploadPanel } from "@/components/chat/PhotoUploadPanel";
 import { QuickReplyButtons, extractChoices } from "@/components/chat/QuickReplyButtons";
 import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
 
@@ -21,6 +23,11 @@ interface ChatContainerProps {
   sendMessage: (content: string) => void;
   error: string | null;
   onClearError: () => void;
+  siteSpec?: SiteSpec | null;
+  onNavigate?: (path: string) => void;
+  showPhotoUpload?: boolean;
+  onPhotoUploadDone?: () => void;
+  siteSpecId?: string;
   className?: string;
 }
 
@@ -32,6 +39,11 @@ export function ChatContainer({
   sendMessage,
   error,
   onClearError,
+  siteSpec,
+  onNavigate,
+  showPhotoUpload,
+  onPhotoUploadDone,
+  siteSpecId,
   className = "",
 }: ChatContainerProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -44,10 +56,12 @@ export function ChatContainer({
     }
   }, [messages, isLoading]);
 
+  const isComplete = currentStep === "complete";
+
   // Determine if latest assistant message has quick-reply choices
   const latestMessage = messages[messages.length - 1];
   const latestAssistantChoices =
-    latestMessage?.role === "assistant" && !isLoading
+    latestMessage?.role === "assistant" && !isLoading && !isComplete
       ? extractChoices(latestMessage.content)
       : [];
 
@@ -85,6 +99,23 @@ export function ChatContainer({
                 <LoadingSpinner className="h-4 w-4 text-green-600" />
                 <span className="text-sm text-gray-500">Thinking...</span>
               </div>
+            </div>
+          )}
+
+          {/* Photo upload panel (shown when trigger_photo_upload tool fires) */}
+          {showPhotoUpload && siteSpecId && onPhotoUploadDone && (
+            <div className="mt-2">
+              <PhotoUploadPanel
+                siteSpecId={siteSpecId}
+                onDone={onPhotoUploadDone}
+              />
+            </div>
+          )}
+
+          {/* Completion card (shown when all steps are done) */}
+          {isComplete && siteSpec && onNavigate && (
+            <div className="mt-4">
+              <CompletionCard siteSpec={siteSpec} onNavigate={onNavigate} />
             </div>
           )}
         </div>
@@ -130,10 +161,22 @@ export function ChatContainer({
         </div>
       )}
 
-      {/* Input area */}
-      <div className="shrink-0">
-        <ChatInput onSend={sendMessage} isLoading={isLoading} />
-      </div>
+      {/* Input area (hidden when complete, hint when photo upload visible) */}
+      {isComplete ? (
+        <div className="shrink-0 border-t border-gray-200 bg-gray-50 px-4 py-3 text-center">
+          <p className="text-sm text-gray-500">
+            All steps complete. Head to the dashboard to build your site.
+          </p>
+        </div>
+      ) : (
+        <div className="shrink-0">
+          <ChatInput
+            onSend={sendMessage}
+            isLoading={isLoading}
+            placeholder={showPhotoUpload ? "Upload your photos above, or type a message..." : undefined}
+          />
+        </div>
+      )}
     </div>
   );
 }

@@ -32,7 +32,7 @@ export interface CustomColours {
   cta: string;
 }
 
-export type SiteSpecStatus = "draft" | "building" | "live" | "error";
+export type SiteSpecStatus = "draft" | "building" | "preview" | "live" | "error";
 export type StyleOption = "modern" | "classic" | "minimal";
 export type PaletteOption =
   | "sage_sand"
@@ -107,6 +107,7 @@ export interface SiteSpec {
   subdomain_slug: string | null;
   netlify_site_id: string | null;
   deploy_url: string | null;
+  preview_url: string | null;
 
   // Chat history
   chat_history: ChatMessage[];

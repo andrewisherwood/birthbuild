@@ -3,7 +3,8 @@ import { supabase } from "@/lib/supabase";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
-import type { SiteSpec, SiteSpecStatus } from "@/types/site-spec";
+import { StatusBadge } from "@/components/ui/StatusBadge";
+import type { SiteSpec } from "@/types/site-spec";
 
 interface SpecViewerProps {
   specId: string;
@@ -33,27 +34,6 @@ const TYPOGRAPHY_NAMES: Record<string, string> = {
   classic: "Classic",
   mixed: "Mixed",
 };
-
-// ---------------------------------------------------------------------------
-// Status badge
-// ---------------------------------------------------------------------------
-
-function StatusBadge({ status }: { status: SiteSpecStatus }) {
-  const styles: Record<SiteSpecStatus, string> = {
-    draft: "bg-gray-100 text-gray-700",
-    building: "bg-yellow-100 text-yellow-800",
-    live: "bg-green-100 text-green-800",
-    error: "bg-red-100 text-red-700",
-  };
-
-  return (
-    <span
-      className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${styles[status]}`}
-    >
-      {status.charAt(0).toUpperCase() + status.slice(1)}
-    </span>
-  );
-}
 
 // ---------------------------------------------------------------------------
 // Colour swatch

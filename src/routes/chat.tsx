@@ -6,7 +6,7 @@
  */
 
 import { useEffect, useRef } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { useSiteSpec } from "@/hooks/useSiteSpec";
 import { useChat } from "@/hooks/useChat";
@@ -14,9 +14,12 @@ import { ChatContainer } from "@/components/chat/ChatContainer";
 import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
 
 export default function ChatPage() {
-  const { loading: authLoading } = useAuth();
+  const { loading: authLoading, profile } = useAuth();
+  const [searchParams] = useSearchParams();
+  const siteId = searchParams.get("site_id") ?? undefined;
   const { siteSpec, loading: specLoading, error: specError, updateSiteSpec, createSiteSpec } =
-    useSiteSpec();
+    useSiteSpec(siteId);
+  const navigate = useNavigate();
 
   const {
     messages,
@@ -27,6 +30,8 @@ export default function ChatPage() {
     sendMessage,
     initChat,
     clearError,
+    showPhotoUpload,
+    dismissPhotoUpload,
   } = useChat({ siteSpec, updateSiteSpec });
 
   // Track whether we have already initialised the chat
@@ -56,6 +61,8 @@ export default function ChatPage() {
     initialisedRef.current = true;
     initChat();
   }, [siteSpec, initChat]);
+
+  const isInstructor = profile?.role === "instructor";
 
   // Full-page loading while auth or spec is loading
   if (authLoading || specLoading) {
@@ -89,6 +96,8 @@ export default function ChatPage() {
     );
   }
 
+  const dashboardPath = siteId ? `/dashboard?site_id=${siteId}` : "/dashboard";
+
   return (
     <main className="flex h-screen flex-col bg-gray-50">
       {/* Header bar */}
@@ -96,12 +105,22 @@ export default function ChatPage() {
         <h1 className="text-lg font-semibold text-gray-900">
           Build Your Website
         </h1>
-        <Link
-          to="/dashboard"
-          className="text-sm font-medium text-green-700 hover:text-green-800"
-        >
-          Edit in Dashboard &rarr;
-        </Link>
+        <div className="flex gap-3">
+          {isInstructor && (
+            <Link
+              to="/admin/sites"
+              className="text-sm font-medium text-gray-500 hover:text-gray-700"
+            >
+              Back to Admin
+            </Link>
+          )}
+          <Link
+            to={dashboardPath}
+            className="text-sm font-medium text-green-700 hover:text-green-800"
+          >
+            Edit in Dashboard &rarr;
+          </Link>
+        </div>
       </header>
 
       {/* Chat container fills remaining space */}
@@ -114,6 +133,11 @@ export default function ChatPage() {
           sendMessage={sendMessage}
           error={chatError}
           onClearError={clearError}
+          siteSpec={siteSpec}
+          onNavigate={(path) => navigate(path)}
+          showPhotoUpload={showPhotoUpload}
+          onPhotoUploadDone={dismissPhotoUpload}
+          siteSpecId={siteSpec?.id}
           className="h-full"
         />
       </div>

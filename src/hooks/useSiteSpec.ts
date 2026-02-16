@@ -12,7 +12,7 @@ interface UseSiteSpecReturn {
   createSiteSpec: () => Promise<SiteSpec | null>;
 }
 
-export function useSiteSpec(): UseSiteSpecReturn {
+export function useSiteSpec(siteId?: string): UseSiteSpecReturn {
   const { user, profile } = useAuth();
   const [siteSpec, setSiteSpec] = useState<SiteSpec | null>(null);
   const [loading, setLoading] = useState(true);
@@ -35,13 +35,15 @@ export function useSiteSpec(): UseSiteSpecReturn {
       setLoading(true);
       setError(null);
 
-      const { data, error: fetchError } = await supabase
-        .from("site_specs")
-        .select("*")
-        .eq("user_id", user.id)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
+      // When siteId is provided (instructor multi-site), fetch by ID.
+      // Otherwise, fetch the latest spec for the current user.
+      let query = supabase.from("site_specs").select("*");
+      if (siteId) {
+        query = query.eq("id", siteId);
+      } else {
+        query = query.eq("user_id", user.id).order("created_at", { ascending: false }).limit(1);
+      }
+      const { data, error: fetchError } = await query.maybeSingle();
 
       if (!mounted) return;
 
@@ -60,13 +62,13 @@ export function useSiteSpec(): UseSiteSpecReturn {
     return () => {
       mounted = false;
     };
-  }, [user]);
+  }, [user, siteId]);
 
   // Record the updated_at timestamp when a build starts (status -> building)
   // or when the site first loads as "live". This lets us detect edits after build.
   useEffect(() => {
     if (!siteSpec) return;
-    if (siteSpec.status === "building" || siteSpec.status === "live") {
+    if (siteSpec.status === "building" || siteSpec.status === "live" || siteSpec.status === "preview") {
       // Only set the ref if it hasn't been set, or if transitioning to building
       // (which means a new build was just triggered).
       if (
@@ -82,7 +84,7 @@ export function useSiteSpec(): UseSiteSpecReturn {
   // the last build was started.
   const isStale =
     siteSpec !== null &&
-    siteSpec.status === "live" &&
+    (siteSpec.status === "live" || siteSpec.status === "preview") &&
     lastBuildUpdatedAtRef.current !== null &&
     siteSpec.updated_at > lastBuildUpdatedAtRef.current;
 

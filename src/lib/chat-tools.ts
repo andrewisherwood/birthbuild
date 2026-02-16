@@ -207,6 +207,15 @@ export const CHAT_TOOLS: ClaudeToolDefinition[] = [
     },
   },
   {
+    name: "trigger_photo_upload",
+    description:
+      "Show the inline photo upload panel so the user can upload headshot, hero, and gallery photos directly in the chat.",
+    input_schema: {
+      type: "object",
+      properties: {},
+    },
+  },
+  {
     name: "mark_step_complete",
     description:
       "Mark a step in the onboarding flow as complete and advance to the next step. Call this after successfully collecting all information for a step.",
@@ -344,6 +353,7 @@ export function mapToolCallToSpecUpdate(
     // update_content call; mark_step_complete is handled by useChat)
     case "generate_content":
     case "mark_step_complete":
+    case "trigger_photo_upload":
       return null;
 
     default:

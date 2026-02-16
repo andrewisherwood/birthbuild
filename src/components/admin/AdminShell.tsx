@@ -14,6 +14,7 @@ interface NavItem {
 const NAV_ITEMS: NavItem[] = [
   { label: "Sessions", path: "/admin/sessions" },
   { label: "Students", path: "/admin/students" },
+  { label: "My Sites", path: "/admin/sites" },
 ];
 
 export function AdminShell({ children }: AdminShellProps) {

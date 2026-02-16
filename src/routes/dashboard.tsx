@@ -1,4 +1,4 @@
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { useSiteSpec } from "@/hooks/useSiteSpec";
 import { useDebouncedSave } from "@/hooks/useDebouncedSave";
@@ -14,9 +14,13 @@ import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
 import type { TabKey } from "@/components/dashboard/TabNav";
 
 export default function DashboardPage() {
-  const { user, loading: authLoading } = useAuth();
-  const { siteSpec, loading: specLoading, error, isStale, updateSiteSpec } = useSiteSpec();
+  const { user, profile, loading: authLoading } = useAuth();
+  const [searchParams] = useSearchParams();
+  const siteId = searchParams.get("site_id") ?? undefined;
+  const { siteSpec, loading: specLoading, error, isStale, updateSiteSpec } = useSiteSpec(siteId);
   const { debouncedUpdate } = useDebouncedSave({ updateSiteSpec });
+
+  const isInstructor = profile?.role === "instructor";
 
   if (authLoading || specLoading) {
     return (
@@ -83,6 +87,7 @@ export default function DashboardPage() {
       siteSpec={spec}
       loading={false}
       error={error}
+      backLink={isInstructor ? { label: "Back to Admin", to: "/admin/sites" } : undefined}
     >
       {renderTabContent}
     </DashboardShell>

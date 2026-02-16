@@ -5,6 +5,7 @@ import DashboardPage from "@/routes/dashboard";
 import PreviewPage from "@/routes/preview";
 import AdminSessionsPage from "@/routes/admin/sessions";
 import AdminStudentsPage from "@/routes/admin/students";
+import AdminSitesPage from "@/routes/admin/sites";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { RoleGate } from "@/components/auth/RoleGate";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
@@ -71,6 +72,16 @@ export function App() {
           <ProtectedRoute>
             <RoleGate role="instructor">
               <AdminStudentsPage />
+            </RoleGate>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/admin/sites"
+        element={
+          <ProtectedRoute>
+            <RoleGate role="instructor">
+              <AdminSitesPage />
             </RoleGate>
           </ProtectedRoute>
         }

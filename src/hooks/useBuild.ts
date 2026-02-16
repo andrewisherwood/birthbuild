@@ -22,6 +22,7 @@ import type { PhotoData } from "@/lib/pages/shared";
 interface BuildStatus {
   status: SiteSpecStatus;
   deploy_url: string | null;
+  preview_url: string | null;
   subdomain_slug: string | null;
 }
 
@@ -60,6 +61,7 @@ export function useBuild(siteSpec: SiteSpec | null): UseBuildReturn {
       ? {
           status: siteSpec.status,
           deploy_url: siteSpec.deploy_url,
+          preview_url: siteSpec.preview_url,
           subdomain_slug: siteSpec.subdomain_slug,
         }
       : null,
@@ -75,6 +77,7 @@ export function useBuild(siteSpec: SiteSpec | null): UseBuildReturn {
       setLastBuildStatus({
         status: siteSpec.status,
         deploy_url: siteSpec.deploy_url,
+        preview_url: siteSpec.preview_url,
         subdomain_slug: siteSpec.subdomain_slug,
       });
       if (siteSpec.status !== "building") {
@@ -102,6 +105,7 @@ export function useBuild(siteSpec: SiteSpec | null): UseBuildReturn {
           const newStatus: BuildStatus = {
             status: (updated.status as SiteSpecStatus) ?? "draft",
             deploy_url: (updated.deploy_url as string | null) ?? null,
+            preview_url: (updated.preview_url as string | null) ?? null,
             subdomain_slug: (updated.subdomain_slug as string | null) ?? null,
           };
           setLastBuildStatus(newStatus);

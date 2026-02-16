@@ -2,8 +2,10 @@ import { useState, useCallback } from "react";
 import { Link } from "react-router-dom";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
+import { StatusBadge } from "@/components/ui/StatusBadge";
 import { useBuild } from "@/hooks/useBuild";
-import type { SiteSpec, SiteSpecStatus } from "@/types/site-spec";
+import { usePublish } from "@/hooks/usePublish";
+import type { SiteSpec } from "@/types/site-spec";
 
 // ---------------------------------------------------------------------------
 // Props
@@ -100,18 +102,6 @@ function buildSummary(siteSpec: SiteSpec): SectionSummary[] {
 }
 
 // ---------------------------------------------------------------------------
-// Status labels
-// ---------------------------------------------------------------------------
-
-const STATUS_LABELS: Record<SiteSpecStatus, { label: string; colour: string }> =
-  {
-    draft: { label: "Draft", colour: "bg-gray-100 text-gray-700" },
-    building: { label: "Building...", colour: "bg-yellow-100 text-yellow-800" },
-    live: { label: "Live", colour: "bg-green-100 text-green-800" },
-    error: { label: "Error", colour: "bg-red-100 text-red-800" },
-  };
-
-// ---------------------------------------------------------------------------
 // Validation warnings
 // ---------------------------------------------------------------------------
 
@@ -163,16 +153,19 @@ const DEVICE_LABELS: Record<DeviceSize, string> = {
 export function PreviewTab({ siteSpec, onFieldChange, isStale = false }: PreviewTabProps) {
   const summary = buildSummary(siteSpec);
   const { building, buildError, triggerBuild, lastBuildStatus, validationWarnings } = useBuild(siteSpec);
+  const { publishing, publishError, publish, unpublish } = usePublish(siteSpec);
   const [deviceSize, setDeviceSize] = useState<DeviceSize>("desktop");
 
   const currentStatus = lastBuildStatus?.status ?? siteSpec.status;
   const deployUrl = lastBuildStatus?.deploy_url ?? siteSpec.deploy_url;
-  const statusInfo = STATUS_LABELS[currentStatus] ?? STATUS_LABELS.draft;
+  const previewUrl = lastBuildStatus?.preview_url ?? siteSpec.preview_url;
   const missingFields = getMissingFields(siteSpec);
-  const canBuild = missingFields.length === 0 && !building;
+  const canBuild = missingFields.length === 0 && !building && !publishing;
   const isLive = currentStatus === "live";
+  const isPreview = currentStatus === "preview";
 
-  // Subdomain handling
+  // Subdomain: editable for draft/preview, locked when live
+  const subdomainLocked = isLive;
   const subdomainValue =
     siteSpec.subdomain_slug ??
     (siteSpec.doula_name ? slugifySubdomain(siteSpec.doula_name) : "");
@@ -189,17 +182,16 @@ export function PreviewTab({ siteSpec, onFieldChange, isStale = false }: Preview
     await triggerBuild();
   }, [triggerBuild]);
 
+  // Use preview_url for iframe (always available after first build)
+  const iframeUrl = previewUrl ?? deployUrl;
+
   return (
     <div className="space-y-6">
       {/* Build Status Card */}
       <Card title="Build Status">
         <div className="flex items-center gap-3">
-          <span
-            className={`inline-flex rounded-full px-3 py-1 text-sm font-medium ${statusInfo.colour}`}
-          >
-            {statusInfo.label}
-          </span>
-          {deployUrl && isLive && (
+          <StatusBadge status={currentStatus} />
+          {isLive && deployUrl && (
             <a
               href={deployUrl}
               target="_blank"
@@ -207,6 +199,16 @@ export function PreviewTab({ siteSpec, onFieldChange, isStale = false }: Preview
               className="text-sm font-medium text-green-700 underline hover:text-green-800"
             >
               View live site
+            </a>
+          )}
+          {isPreview && previewUrl && (
+            <a
+              href={previewUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-sm font-medium text-blue-700 underline hover:text-blue-800"
+            >
+              View preview
             </a>
           )}
         </div>
@@ -250,7 +252,35 @@ export function PreviewTab({ siteSpec, onFieldChange, isStale = false }: Preview
           </div>
         )}
 
-        {/* Success message */}
+        {/* Publish error */}
+        {publishError && !publishing && (
+          <div
+            className="mt-4 rounded-md border border-red-200 bg-red-50 p-3"
+            role="alert"
+          >
+            <p className="text-sm text-red-700">{publishError}</p>
+          </div>
+        )}
+
+        {/* Preview success message */}
+        {isPreview && previewUrl && !building && (
+          <div className="mt-4 rounded-md border border-blue-200 bg-blue-50 p-3">
+            <p className="text-sm text-blue-700">
+              Your site preview is ready at{" "}
+              <a
+                href={previewUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-medium underline"
+              >
+                {previewUrl}
+              </a>
+              . Click <strong>Publish</strong> to make it live on your custom domain.
+            </p>
+          </div>
+        )}
+
+        {/* Live success message */}
         {isLive && deployUrl && !building && (
           <div className="mt-4 rounded-md border border-green-200 bg-green-50 p-3">
             <p className="text-sm text-green-700">
@@ -268,13 +298,13 @@ export function PreviewTab({ siteSpec, onFieldChange, isStale = false }: Preview
         )}
 
         {/* Stale build banner */}
-        {isLive && isStale && !building && (
+        {(isLive || isPreview) && isStale && !building && (
           <div
             className="mt-4 rounded-md border border-yellow-200 bg-yellow-50 p-3"
             role="status"
           >
             <p className="text-sm text-yellow-800">
-              You&rsquo;ve made changes since your last build. Rebuild to update your live site.
+              You&rsquo;ve made changes since your last build. Rebuild to update your site.
             </p>
           </div>
         )}
@@ -294,8 +324,8 @@ export function PreviewTab({ siteSpec, onFieldChange, isStale = false }: Preview
           </div>
         )}
 
-        {/* Build / Rebuild button */}
-        <div className="mt-4">
+        {/* Action buttons */}
+        <div className="mt-4 flex flex-wrap gap-3">
           {(currentStatus === "draft" || currentStatus === "error") && (
             <Button
               onClick={handleBuild}
@@ -305,7 +335,7 @@ export function PreviewTab({ siteSpec, onFieldChange, isStale = false }: Preview
               Build My Site
             </Button>
           )}
-          {isLive && (
+          {(isPreview || isLive) && (
             <Button
               onClick={handleBuild}
               loading={building}
@@ -313,6 +343,25 @@ export function PreviewTab({ siteSpec, onFieldChange, isStale = false }: Preview
               variant="secondary"
             >
               Rebuild Site
+            </Button>
+          )}
+          {isPreview && (
+            <Button
+              onClick={() => void publish()}
+              loading={publishing}
+              disabled={building || publishing}
+            >
+              Publish
+            </Button>
+          )}
+          {isLive && (
+            <Button
+              onClick={() => void unpublish()}
+              loading={publishing}
+              disabled={building || publishing}
+              variant="outline"
+            >
+              Unpublish
             </Button>
           )}
           {currentStatus === "building" && (
@@ -338,11 +387,11 @@ export function PreviewTab({ siteSpec, onFieldChange, isStale = false }: Preview
               type="text"
               value={subdomainValue}
               onChange={(e) => handleSubdomainChange(e.target.value)}
-              readOnly={isLive}
-              disabled={isLive}
+              readOnly={subdomainLocked}
+              disabled={subdomainLocked}
               maxLength={63}
               className={`block w-48 rounded-l-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-green-500 focus:ring-green-500 ${
-                isLive ? "bg-gray-50 text-gray-500" : ""
+                subdomainLocked ? "bg-gray-50 text-gray-500" : ""
               }`}
               aria-describedby="subdomain-preview"
             />
@@ -353,16 +402,16 @@ export function PreviewTab({ siteSpec, onFieldChange, isStale = false }: Preview
               .birthbuild.com
             </span>
           </div>
-          {isLive && (
+          {subdomainLocked && (
             <p className="mt-1 text-xs text-gray-500">
-              Subdomain cannot be changed after deployment.
+              Subdomain cannot be changed while the site is live. Unpublish first to edit.
             </p>
           )}
         </div>
       </Card>
 
-      {/* Preview Iframe (only when deploy_url exists) */}
-      {deployUrl && (
+      {/* Preview Iframe (uses preview_url, always available after first build) */}
+      {iframeUrl && (
         <Card title="Site Preview">
           <div className="mb-4 flex items-center gap-2">
             {(Object.keys(DEVICE_WIDTHS) as DeviceSize[]).map((size) => (
@@ -381,7 +430,7 @@ export function PreviewTab({ siteSpec, onFieldChange, isStale = false }: Preview
               </button>
             ))}
             <a
-              href={deployUrl}
+              href={iframeUrl}
               target="_blank"
               rel="noopener noreferrer"
               className="ml-auto text-sm font-medium text-green-700 underline hover:text-green-800"
@@ -393,7 +442,7 @@ export function PreviewTab({ siteSpec, onFieldChange, isStale = false }: Preview
             className="flex justify-center overflow-hidden rounded-lg border border-gray-200 bg-gray-100"
           >
             <iframe
-              src={deployUrl}
+              src={iframeUrl}
               title="Site preview"
               sandbox="allow-scripts allow-same-origin"
               className="h-[600px] border-0 bg-white"

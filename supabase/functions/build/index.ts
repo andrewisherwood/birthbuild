@@ -660,6 +660,9 @@ Deno.serve(async (req: Request): Promise<Response> => {
   // 9. Create or get Netlify site
   // -----------------------------------------------------------------------
 
+  // Save pre-build status so we can preserve "live" through rebuilds
+  const preBuildStatus = siteSpec.status as string;
+
   let netlifySiteId = siteSpec.netlify_site_id as string | null;
   const netlifyHeaders = {
     Authorization: `Bearer ${netlifyApiToken}`,
@@ -668,13 +671,12 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
   try {
     if (!netlifySiteId) {
-      // Create a new Netlify site
+      // Create a new Netlify site WITHOUT custom_domain (preview only)
       const createResponse = await fetch("https://api.netlify.com/api/v1/sites", {
         method: "POST",
         headers: netlifyHeaders,
         body: JSON.stringify({
           name: `birthbuild-${subdomainSlug}`,
-          custom_domain: `${subdomainSlug}.birthbuild.com`,
         }),
       });
 
@@ -742,20 +744,31 @@ Deno.serve(async (req: Request): Promise<Response> => {
   }
 
   // -----------------------------------------------------------------------
-  // 11. Update site_spec: status = "live"
+  // 11. Update site_spec with preview URL and appropriate status
   // -----------------------------------------------------------------------
 
-  const deployUrl = `https://${subdomainSlug}.birthbuild.com`;
+  const previewUrl = `https://birthbuild-${subdomainSlug}.netlify.app`;
+
+  // If the site was already live, keep it live (rebuild scenario).
+  // Otherwise, set to "preview" — user must explicitly publish to go live.
+  const newStatus = preBuildStatus === "live" ? "live" : "preview";
+
+  const updateFields: Record<string, unknown> = {
+    status: newStatus,
+    preview_url: previewUrl,
+    netlify_site_id: netlifySiteId,
+    subdomain_slug: subdomainSlug,
+    updated_at: new Date().toISOString(),
+  };
+
+  // Only set deploy_url if the site was already live (preserve existing custom domain URL)
+  if (preBuildStatus === "live" && siteSpec.deploy_url) {
+    updateFields.deploy_url = siteSpec.deploy_url;
+  }
 
   const { error: updateError } = await serviceClient
     .from("site_specs")
-    .update({
-      status: "live",
-      deploy_url: deployUrl,
-      netlify_site_id: netlifySiteId,
-      subdomain_slug: subdomainSlug,
-      updated_at: new Date().toISOString(),
-    })
+    .update(updateFields)
     .eq("id", body.site_spec_id);
 
   if (updateError) {
@@ -767,7 +780,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
   // -----------------------------------------------------------------------
 
   return new Response(
-    JSON.stringify({ success: true, deploy_url: deployUrl }),
+    JSON.stringify({ success: true, preview_url: previewUrl }),
     {
       status: 200,
       headers: { ...cors, "Content-Type": "application/json" },

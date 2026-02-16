@@ -10,10 +10,11 @@ import { Button } from "@/components/ui/Button";
 interface ChatInputProps {
   onSend: (message: string) => void;
   isLoading: boolean;
+  placeholder?: string;
   className?: string;
 }
 
-export function ChatInput({ onSend, isLoading, className = "" }: ChatInputProps) {
+export function ChatInput({ onSend, isLoading, placeholder, className = "" }: ChatInputProps) {
   const [value, setValue] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -65,7 +66,7 @@ export function ChatInput({ onSend, isLoading, className = "" }: ChatInputProps)
         value={value}
         onChange={(e) => setValue(e.target.value)}
         onKeyDown={handleKeyDown}
-        placeholder="Type your message..."
+        placeholder={placeholder ?? "Type your message..."}
         disabled={isLoading}
         rows={1}
         className="flex-1 resize-none rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 text-sm text-gray-900 placeholder-gray-500 focus:border-green-500 focus:outline-none focus:ring-1 focus:ring-green-500 disabled:opacity-50"

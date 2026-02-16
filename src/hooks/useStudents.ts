@@ -94,7 +94,7 @@ export function useStudents(sessionId?: string): UseStudentsReturn {
     const { data: specData } = await supabase
       .from("site_specs")
       .select(
-        "id, user_id, status, business_name, doula_name, deploy_url, service_area, email, bio, tagline, services",
+        "id, user_id, status, business_name, doula_name, deploy_url, preview_url, service_area, email, bio, tagline, services",
       )
       .in("user_id", studentIds);
 
@@ -122,6 +122,7 @@ export function useStudents(sessionId?: string): UseStudentsReturn {
               business_name: (spec.business_name as string | null) ?? null,
               doula_name: (spec.doula_name as string | null) ?? null,
               deploy_url: (spec.deploy_url as string | null) ?? null,
+              preview_url: (spec.preview_url as string | null) ?? null,
               completion_percent: calculateCompletion(spec),
             }
           : null,

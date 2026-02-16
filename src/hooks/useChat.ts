@@ -31,9 +31,11 @@ export interface UseChatReturn {
   currentStep: ChatStep;
   completedSteps: ChatStep[];
   pendingContent: PendingContent | null;
+  showPhotoUpload: boolean;
   sendMessage: (content: string) => Promise<void>;
   initChat: () => void;
   clearError: () => void;
+  dismissPhotoUpload: () => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -90,6 +92,7 @@ export function useChat({ siteSpec, updateSiteSpec }: UseChatParams): UseChatRet
   const [currentStep, setCurrentStep] = useState<ChatStep>("welcome");
   const [completedSteps, setCompletedSteps] = useState<ChatStep[]>([]);
   const [pendingContent, setPendingContent] = useState<PendingContent | null>(null);
+  const [showPhotoUpload, setShowPhotoUpload] = useState(false);
 
   // Guard against concurrent sends
   const sendingRef = useRef(false);
@@ -175,6 +178,11 @@ export function useChat({ siteSpec, updateSiteSpec }: UseChatParams): UseChatRet
             setPendingContent(null);
           }
 
+          // Show inline photo upload panel
+          if (toolCall.name === "trigger_photo_upload") {
+            setShowPhotoUpload(true);
+          }
+
           // Track generated-but-not-confirmed content
           if (toolCall.name === "generate_content") {
             setPendingContent({
@@ -228,6 +236,11 @@ export function useChat({ siteSpec, updateSiteSpec }: UseChatParams): UseChatRet
     setError(null);
   }, []);
 
+  const dismissPhotoUpload = useCallback(() => {
+    setShowPhotoUpload(false);
+    void sendMessage("I've finished uploading my photos");
+  }, [sendMessage]);
+
   return {
     messages,
     isLoading,
@@ -235,8 +248,10 @@ export function useChat({ siteSpec, updateSiteSpec }: UseChatParams): UseChatRet
     currentStep,
     completedSteps,
     pendingContent,
+    showPhotoUpload,
     sendMessage,
     initChat,
     clearError,
+    dismissPhotoUpload,
   };
 }

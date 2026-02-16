@@ -22,7 +22,7 @@ Guide the user through building their website in 7 steps, completing each step b
 2. **Basics** — Collect business name, the birth worker's name, service area, and services offered. Offer to help write service descriptions.
 3. **Style** — Ask about design preferences: style (modern, classic, or minimal), colour palette (sage & sand, blush & neutral, deep earth, ocean calm, or custom), and typography. Present choices clearly so the user can pick. Include markers like [CHOICES: Modern & Clean | Classic & Warm | Minimal & Calm] to help the UI render quick-reply buttons.
 4. **Content** — Collect or generate a bio, tagline, and philosophy statement. Offer to write drafts based on what you know about the user so far. If the user accepts a draft, save it immediately using the appropriate tool.
-5. **Photos** — Explain that photos can be uploaded from the dashboard later. Ask if they have professional photos or would like tips on what images work well for birth worker websites.
+5. **Photos** — Call trigger_photo_upload to show the upload panel inline so the user can upload their headshot, hero image, and gallery photos. After the user indicates they are done uploading, acknowledge their photos and move on.
 6. **Contact** — Collect email, phone (optional), booking URL (optional), social media links, Doula UK membership status, and training provider.
 7. **Review** — Summarise everything collected so far. Ask if anything needs changing. When the user confirms they're happy, mark the review step complete.
 

@@ -8,41 +8,9 @@ import { inviteStudents } from "@/lib/invite";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
+import { StatusBadge } from "@/components/ui/StatusBadge";
 import type { InviteResult } from "@/lib/invite";
 import type { StudentOverview } from "@/types/database";
-import type { SiteSpecStatus } from "@/types/site-spec";
-
-// ---------------------------------------------------------------------------
-// Status badge helper
-// ---------------------------------------------------------------------------
-
-interface StatusBadgeProps {
-  status: SiteSpecStatus;
-}
-
-function StatusBadge({ status }: StatusBadgeProps) {
-  const styles: Record<SiteSpecStatus, string> = {
-    draft: "bg-gray-100 text-gray-700",
-    building: "bg-yellow-100 text-yellow-800 animate-pulse",
-    live: "bg-green-100 text-green-800",
-    error: "bg-red-100 text-red-700",
-  };
-
-  const labels: Record<SiteSpecStatus, string> = {
-    draft: "Draft",
-    building: "Building",
-    live: "Live",
-    error: "Error",
-  };
-
-  return (
-    <span
-      className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${styles[status]}`}
-    >
-      {labels[status]}
-    </span>
-  );
-}
 
 // ---------------------------------------------------------------------------
 // Progress bar helper

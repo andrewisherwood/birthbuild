@@ -2,8 +2,8 @@
 
 **Project:** BirthBuild
 **Started:** 2026-02-15T17:15:00Z
-**Last Updated:** 2026-02-15T21:45:00Z
-**Current Phase:** All Complete
+**Last Updated:** 2026-02-16T00:10:00Z
+**Current Phase:** Post-MVP — Live Testing & Fixes
 
 ## Progress
 
@@ -15,16 +15,38 @@
 | 4 | Build Pipeline & Deploy | ✅ | ✅ | ✅ | ✅ | ✅ |
 | 5 | Instructor Admin | ✅ | ✅ | ✅ | ✅ | ✅ |
 | 6 | Polish & Integration Testing | ✅ | ✅ | ✅ | ✅ | ✅ |
+| 7 | Live Deployment & Hotfixes | — | 🔧 | — | — | — |
 
 ## Current Activity
 
-**All phases complete**
-- All 6 phases merged to main
-- Branch: `main`
+**Post-MVP live testing session (2026-02-16)**
+- End-to-end flow verified: chatbot → site spec → build → deploy to subdomain
+- First live site deployed: `andrew-isherwood.birthbuild.com`
+- All 4 Edge Functions deployed to Supabase (chat, build, invite, generate-link)
+- Multiple hotfixes applied (see Session 2 below)
 
-## Issues & Blockers
+## Live Deployment
 
-None
+| Component | Status | URL |
+|-----------|--------|-----|
+| Admin PWA | ✅ Live | birthbuild.com |
+| Supabase project | ✅ Live | btkruvwxhyqotofpfbps.supabase.co |
+| Edge Functions (4) | ✅ Deployed | chat v3, build v1, invite v1, generate-link v1 |
+| First generated site | ✅ Live | andrew-isherwood.birthbuild.com |
+
+## Known Issues (from live testing)
+
+| # | Issue | Severity | Status |
+|---|-------|----------|--------|
+| 1 | Chat feels slow during tool-use steps (multiple sequential Claude API calls) | Medium | Open |
+| 2 | Text input lag in chat (possible re-render issue) | Medium | Open |
+| 3 | No "next" button between chat steps — user must prompt manually | Medium | Open |
+| 4 | Chat ↔ dashboard navigation lacks clear flow/CTA | Medium | Open |
+| 5 | Photo thumbnails broken in dashboard (storage URLs not resolving) | Medium | Open |
+| 6 | Multiple empty draft site_spec rows created per user | Low | Open |
+| 7 | Supabase free-tier email rate limits block magic links during testing | Low | Workaround (generate-link Edge Function) |
+| 8 | Custom SMTP (Resend) not configured | Low | Blocked (Resend outage) |
+| 9 | Build status badge still shows "Draft" when viewing wrong site_spec row | Low | Open |
 
 ## Review Stats
 
@@ -38,7 +60,23 @@ None
 | QA findings fixed | 2 |
 | Avg phase duration | ~30 min |
 
-## Audit Trail
+## Session 2 — Live Deployment Hotfixes (2026-02-16)
+
+| Timestamp | Fix |
+|-----------|-----|
+| ~22:30 | Fixed white screen: added try-catch to `useAuth.getInitialSession()` so loading spinner resolves on error |
+| ~22:35 | Applied DB migration: `handle_new_user` trigger, backfilled profiles, fixed search_path on 5 functions, added 8 FK indexes, reloaded PostgREST cache |
+| ~22:40 | Resolved 5/6 Supabase security advisories (Function Search Path Mutable, Unindexed Foreign Keys) |
+| ~22:45 | Deployed chat Edge Function (was missing from Supabase) |
+| ~22:50 | Created tenant "BirthBuild Demo" + tenant_secrets row; set hello@ as instructor, chef@ as student |
+| ~23:05 | Deployed temporary `generate-link` Edge Function to bypass email rate limits |
+| ~23:15 | Redeployed chat Edge Function with `verify_jwt: false` (function handles auth internally) |
+| ~23:30 | Added tool-use loop to chat Edge Function — auto-sends `tool_result` back to Claude and continues until text response |
+| ~23:55 | Deployed build + invite Edge Functions |
+| ~00:00 | NETLIFY_API_TOKEN configured as Edge Function secret |
+| ~00:01 | First live site deployed to andrew-isherwood.birthbuild.com |
+
+## Audit Trail (Session 1 — Build Phase)
 
 | Timestamp | Event |
 |-----------|-------|

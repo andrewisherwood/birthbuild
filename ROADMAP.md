@@ -116,4 +116,50 @@ Edit/rebuild flow end-to-end. WCAG audit on generated sites. Lighthouse optimisa
 - QA found 2 heading hierarchy gaps in services.ts and about.ts — fixed in 1 round
 - Security: CLEAN (0 findings) — all prior findings verified with no regressions
 
-**Project Status:** All 6 phases complete. BirthBuild MVP delivered.
+**Project Status:** MVP delivered and first live site deployed.
+
+---
+
+## Post-MVP: Next Steps
+
+### Priority 1 — Blockers & Core UX (next session)
+
+| Task | Description | Effort |
+|------|-------------|--------|
+| Fix duplicate site_spec rows | Users get multiple empty draft rows on login. Ensure only one spec per user, or select the correct one. | Small |
+| Configure Resend SMTP | Set up custom SMTP in Supabase Auth settings to bypass free-tier email rate limits. Requires Resend domain verification. | Small |
+| Chat tool-use responsiveness | The server-side tool loop causes 5-15s waits. Show typing indicator, or stream partial text to the client. | Medium |
+| Chat step navigation | Add "Next step" / "Skip" buttons so users don't have to type to advance. Parse `[CHOICES: ...]` markers into clickable quick-reply buttons. | Medium |
+| Photo storage URLs | Photo thumbnails show broken images. Verify Supabase Storage bucket is public or generate signed URLs for display. | Small |
+| Chat ↔ dashboard flow | Add clear CTAs to move between chat and dashboard. Consider a unified progress sidebar. | Medium |
+
+### Priority 2 — Polish & Reliability
+
+| Task | Description | Effort |
+|------|-------------|--------|
+| Text input lag | Profile re-renders or debounce interaction causing input delay. Investigate and optimise. | Small |
+| Build status per-spec | The dashboard shows the wrong spec's build status when multiple exist. Fix spec selection logic. | Small |
+| Delete generate-link Edge Function | Temporary auth helper — remove once SMTP is configured. It has no JWT verification. | Tiny |
+| Error states in build flow | Show clearer error messages when build fails (missing fields, Netlify errors). | Small |
+| Chat history restoration | When returning to chat, restore conversation state properly including step progress. | Medium |
+
+### Priority 3 — Features & Scale
+
+| Task | Description | Effort |
+|------|-------------|--------|
+| Custom domain support | Allow users to connect their own domain instead of subdomain.birthbuild.com. Netlify API supports this. | Medium |
+| Template variety | Add more site templates beyond the current single layout. Different page structures, hero styles, etc. | Large |
+| Photo integration in generated sites | Include uploaded photos in the generated HTML (hero image, profile photo, gallery). Currently photos upload but don't appear in builds. | Medium |
+| Instructor dashboard enhancements | Real-time student progress, bulk actions, session analytics. | Medium |
+| Stripe integration | Payment flow for instructors to subscribe and manage their API key billing. | Large |
+| Blog/CMS module | Allow users to add blog posts that get included in their generated site. | Large |
+| SEO audit automation | Run Lighthouse scores on generated sites and surface recommendations. | Medium |
+
+### Priority 4 — Infrastructure
+
+| Task | Description | Effort |
+|------|-------------|--------|
+| CI/CD pipeline | GitHub Actions for type-checking, linting, and Edge Function deployment on push. | Medium |
+| Staging environment | Supabase branch or separate project for testing before production. | Medium |
+| Monitoring & alerting | Edge Function error rates, build success rates, API usage tracking. | Medium |
+| Database backups | Automated Supabase backup schedule beyond default. | Small |

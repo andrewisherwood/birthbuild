@@ -496,69 +496,114 @@ Deno.serve(async (req: Request): Promise<Response> => {
   }
 
   // -----------------------------------------------------------------------
-  // 6. Call the Claude API
+  // 6. Call the Claude API (with tool-use loop)
   // -----------------------------------------------------------------------
 
   // SEC-009 & SEC-010: System prompt and tools are hardcoded above,
   // never accepted from the client request body.
-  const claudeBody: Record<string, unknown> = {
-    model: "claude-sonnet-4-5-20250929",
-    max_tokens: 1024,
-    system: SYSTEM_PROMPT,
-    messages: body.messages,
-    tools: CHAT_TOOLS,
+  const conversationMessages: Array<Record<string, unknown>> = [
+    ...body.messages,
+  ];
+
+  const claudeHeaders = {
+    "Content-Type": "application/json",
+    "x-api-key": secret.claude_api_key,
+    "anthropic-version": "2023-06-01",
   };
 
-  let claudeResponse: Response;
-  try {
-    claudeResponse = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": secret.claude_api_key,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify(claudeBody),
-    });
-  } catch (fetchError: unknown) {
-    // SEC-008: Log actual error server-side, return generic message to client
-    const errorDetail =
-      fetchError instanceof Error ? fetchError.message : "Unknown fetch error";
-    console.error("[chat] Failed to reach Claude API:", errorDetail);
-    return new Response(
-      JSON.stringify({ error: "The AI service is currently unavailable. Please try again." }),
-      {
-        status: 502,
-        headers: { ...cors, "Content-Type": "application/json" },
-      },
-    );
-  }
+  // Accumulate all content blocks across tool-use loop iterations
+  const allContentBlocks: Array<Record<string, unknown>> = [];
+  const MAX_TOOL_ITERATIONS = 5;
+  let iterations = 0;
+  // deno-lint-ignore no-explicit-any
+  let lastClaudeData: any = null;
 
-  // SEC-008: Log actual error server-side, return generic message to client
-  if (!claudeResponse.ok) {
-    const errorText = await claudeResponse.text();
-    console.error(
-      `[chat] Claude API error (HTTP ${claudeResponse.status}):`,
-      errorText,
+  while (iterations <= MAX_TOOL_ITERATIONS) {
+    let claudeResponse: Response;
+    try {
+      claudeResponse = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: claudeHeaders,
+        body: JSON.stringify({
+          model: "claude-sonnet-4-5-20250929",
+          max_tokens: 1024,
+          system: SYSTEM_PROMPT,
+          messages: conversationMessages,
+          tools: CHAT_TOOLS,
+        }),
+      });
+    } catch (fetchError: unknown) {
+      const errorDetail =
+        fetchError instanceof Error ? fetchError.message : "Unknown fetch error";
+      console.error("[chat] Failed to reach Claude API:", errorDetail);
+      return new Response(
+        JSON.stringify({ error: "The AI service is currently unavailable. Please try again." }),
+        {
+          status: 502,
+          headers: { ...cors, "Content-Type": "application/json" },
+        },
+      );
+    }
+
+    if (!claudeResponse.ok) {
+      const errorText = await claudeResponse.text();
+      console.error(
+        `[chat] Claude API error (HTTP ${claudeResponse.status}):`,
+        errorText,
+      );
+      return new Response(
+        JSON.stringify({
+          error: "The AI service is currently unavailable. Please try again.",
+        }),
+        {
+          status: 502,
+          headers: { ...cors, "Content-Type": "application/json" },
+        },
+      );
+    }
+
+    lastClaudeData = await claudeResponse.json();
+    const contentBlocks = lastClaudeData.content as Array<Record<string, unknown>>;
+    allContentBlocks.push(...contentBlocks);
+
+    // If Claude didn't use tools, we're done
+    if (lastClaudeData.stop_reason !== "tool_use") {
+      break;
+    }
+
+    // Build tool_result messages for each tool_use block
+    const toolUseBlocks = contentBlocks.filter(
+      (b: Record<string, unknown>) => b.type === "tool_use",
     );
-    return new Response(
-      JSON.stringify({
-        error: "The AI service is currently unavailable. Please try again.",
+    const toolResults = toolUseBlocks.map(
+      (b: Record<string, unknown>) => ({
+        type: "tool_result" as const,
+        tool_use_id: b.id,
+        content: "Saved successfully.",
       }),
-      {
-        status: 502,
-        headers: { ...cors, "Content-Type": "application/json" },
-      },
     );
+
+    // Append assistant response + tool results to conversation for next iteration
+    conversationMessages.push({
+      role: "assistant",
+      content: contentBlocks,
+    });
+    conversationMessages.push({
+      role: "user",
+      content: toolResults,
+    });
+
+    iterations++;
   }
 
   // -----------------------------------------------------------------------
-  // 7. Return the Claude response
+  // 7. Return the merged Claude response
   // -----------------------------------------------------------------------
 
-  const claudeData: unknown = await claudeResponse.json();
+  // Replace content with accumulated blocks from all iterations
+  lastClaudeData.content = allContentBlocks;
 
-  return new Response(JSON.stringify(claudeData), {
+  return new Response(JSON.stringify(lastClaudeData), {
     status: 200,
     headers: { ...cors, "Content-Type": "application/json" },
   });

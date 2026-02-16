@@ -47,23 +47,30 @@ export function useAuth(): UseAuthReturn {
     let mounted = true;
 
     async function getInitialSession() {
-      const {
-        data: { session: currentSession },
-      } = await supabase.auth.getSession();
+      try {
+        const {
+          data: { session: currentSession },
+        } = await supabase.auth.getSession();
 
-      if (!mounted) return;
-
-      setSession(currentSession);
-      setUser(currentSession?.user ?? null);
-
-      if (currentSession?.user) {
-        const userProfile = await fetchProfile(currentSession.user.id);
         if (!mounted) return;
-        setProfile(userProfile);
-        setRole(userProfile?.role ?? null);
+
+        setSession(currentSession);
+        setUser(currentSession?.user ?? null);
+
+        if (currentSession?.user) {
+          const userProfile = await fetchProfile(currentSession.user.id);
+          if (!mounted) return;
+          setProfile(userProfile);
+          setRole(userProfile?.role ?? null);
+        }
+      } catch {
+        // Auth session fetch failed (network error, invalid credentials, etc.).
+        // Fall through to setLoading(false) so the UI renders instead of spinning.
       }
 
-      setLoading(false);
+      if (mounted) {
+        setLoading(false);
+      }
     }
 
     void getInitialSession();

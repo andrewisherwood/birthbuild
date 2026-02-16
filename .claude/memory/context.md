@@ -1,17 +1,19 @@
 # Conductor Working Context
 
-**Last Updated:** 2026-02-15T21:45:00Z
+**Last Updated:** 2026-02-16T00:10:00Z
 **Project:** BirthBuild
-**Status:** All 6 phases complete — project delivered
-**Session:** 1 (complete)
+**Status:** MVP live — post-deployment fixes in progress
+**Session:** 2 (live testing & hotfixes)
 
-## Final State
-- All 6 phases merged to main
-- 6 PRs merged (#1–#6)
-- 20 security findings fixed, 2 QA findings fixed
-- 12 QA rounds total (2 per phase)
-- Branch: `main`
-- No open blockers
+## Current State
+- All 6 build phases merged to main
+- First live site deployed: andrew-isherwood.birthbuild.com
+- 4 Edge Functions deployed: chat (v3), build (v1), invite (v1), generate-link (v1, temporary)
+- Supabase project: btkruvwxhyqotofpfbps (eu-west-1)
+- Tenant: "BirthBuild Demo" (831498ce-9777-4fc0-a326-5647862d395a)
+- Test users: hello@andrewisherwood.com (instructor), chefandrewisherwood@gmail.com (student)
+- Session: "Demo Workshop" (a9ea233f-d417-4615-b04c-b4a75eb17579)
+- 9 known issues from live testing (see STATUS.md)
 
 ## Phase History (Final)
 
@@ -42,9 +44,11 @@
 - **Heading hierarchy**: Audit ALL page generators for heading gaps, not just the one mentioned
 - **Git rebase for push conflicts**: When QA pushes before Security, rebase before pushing
 
-## Open Issues (Deferred)
+## Open Issues
 
-- 9 Low/Informational security findings deferred (see STATUS.md)
+- 9 UX/bug issues from live testing (see STATUS.md Known Issues table)
+- 9 Low/Informational security findings deferred from build phase
+- generate-link Edge Function is unauthenticated — delete once SMTP configured
 
 ## Decisions Log
 
@@ -54,3 +58,7 @@
 - Phase 4: Client-side HTML generation with Edge Function handling only zip + deploy
 - Phase 5: Invite Edge Function with service role for auth.admin.* operations
 - Phase 6: ErrorBoundary as class component (only exception to functional-only rule)
+- Session 2: All Edge Functions deployed with verify_jwt: false (they handle auth internally)
+- Session 2: Tool-use loop handled server-side in chat Edge Function (not client-side) to keep client simple
+- Session 2: Temporary generate-link Edge Function deployed (no JWT) as workaround for email rate limits
+- Session 2: Multi-tenant model confirmed: instructors supply their own Claude API key via tenant_secrets

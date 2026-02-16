@@ -139,3 +139,10 @@ _(Entries added by Security Agent via /security-audit skill)_
 - **CRITICAL** `SUPABASE_SERVICE_ROLE_KEY` — supabase/functions/build/index.ts:362
 - **CRITICAL** `SUPABASE_SERVICE_ROLE_KEY` — supabase/functions/publish/index.ts:109
 
+
+### Scan — 21bce34 (2026-02-16T15:00:05Z)
+
+**Commit:** `21bce34` | **Files scanned:** 11 | **Findings:** 2
+
+- **CRITICAL** `SUPABASE_SERVICE_ROLE_KEY` — supabase/functions/design-chat/index.ts:230
+

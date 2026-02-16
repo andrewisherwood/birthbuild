@@ -68,32 +68,39 @@ export function usePhotoUpload(siteSpecId: string | null): UsePhotoUploadReturn 
       setLoading(true);
       setError(null);
 
-      const { data, error: fetchError } = await supabase
-        .from("photos")
-        .select("*")
-        .eq("site_spec_id", siteSpecId)
-        .order("sort_order", { ascending: true });
+      try {
+        const { data, error: fetchError } = await supabase
+          .from("photos")
+          .select("*")
+          .eq("site_spec_id", siteSpecId)
+          .order("sort_order", { ascending: true });
 
-      if (!mounted) return;
+        if (!mounted) return;
 
-      if (fetchError) {
-        console.error("Failed to fetch photos:", fetchError);
-        setError("Unable to load photos. Please try again.");
-        setLoading(false);
-        return;
+        if (fetchError) {
+          setError("Unable to load photos. Please try again.");
+          setLoading(false);
+          return;
+        }
+
+        const fetchedPhotos = (data as Photo[]) ?? [];
+        setPhotos(fetchedPhotos);
+
+        // Pre-generate signed URLs for all photos
+        const paths = fetchedPhotos.map((p) => p.storage_path);
+        const urls = await generateSignedUrls(paths);
+        if (mounted) {
+          setPhotoUrls(urls);
+        }
+      } catch {
+        if (mounted) {
+          setError("Unable to load photos. Please try again.");
+        }
       }
 
-      const fetchedPhotos = (data as Photo[]) ?? [];
-      setPhotos(fetchedPhotos);
-
-      // Pre-generate signed URLs for all photos
-      const paths = fetchedPhotos.map((p) => p.storage_path);
-      const urls = await generateSignedUrls(paths);
       if (mounted) {
-        setPhotoUrls(urls);
+        setLoading(false);
       }
-
-      setLoading(false);
     }
 
     void fetchPhotos();

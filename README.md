@@ -20,10 +20,13 @@ Built for doulas. Designed to scale to any solo practitioner profession.
 
 - Magic link authentication (no passwords)
 - Guided chatbot onboarding or form-based dashboard
+- Inline photo upload during chat flow
 - AI-generated content (bios, taglines, FAQs, service descriptions)
 - 4 curated colour palettes + custom option
+- Preview before publish — build deploys to a preview URL first, then publish adds a custom subdomain
 - WCAG 2.1 AA compliant output
 - Multi-tenant instructor model (workshop-ready)
+- Instructor site management — create, preview, publish, and delete multiple sites
 - Edit and rebuild via chat or dashboard
 
 ## Getting Started

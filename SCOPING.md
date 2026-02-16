@@ -101,10 +101,11 @@ Instructor creates session
 │                                                         │
 │  ┌──────────────────────────────────────────────────┐  │
 │  │           Edge Functions                          │  │
-│  │  • /api/chat      → Claude API proxy              │  │
-│  │  • /api/build     → Trigger MAI build             │  │
-│  │  • /api/deploy    → Netlify deploy API            │  │
-│  │  • /api/preview   → Generate preview              │  │
+│  │  • /api/chat        → Claude API proxy            │  │
+│  │  • /api/build       → Site generation + deploy    │  │
+│  │  • /api/publish     → Publish/unpublish (domain)  │  │
+│  │  • /api/delete-site → Cleanup site + Netlify      │  │
+│  │  • /api/invite      → Magic link invites          │  │
 │  └──────────────────────────────────────────────────┘  │
 └─────────────────────────────────────────────────────────┘
                         │
@@ -175,7 +176,7 @@ create table site_specs (
   user_id         uuid references auth.users(id) on delete cascade,
   tenant_id       uuid references tenants(id),
   session_id      uuid references sessions(id),
-  status          text default 'draft',           -- draft/building/live/error
+  status          text default 'draft',           -- draft/building/preview/live/error
   
   -- Business info
   business_name   text,
@@ -218,7 +219,8 @@ create table site_specs (
   -- Deployment
   subdomain_slug  text unique,                    -- "shellie-poulter"
   netlify_site_id text,
-  deploy_url      text,                           -- "https://shellie-poulter.birthbuild.com"
+  preview_url     text,                            -- "https://birthbuild-shellie-poulter.netlify.app"
+  deploy_url      text,                           -- "https://shellie-poulter.birthbuild.com" (set on publish)
   
   -- Chat history (for context continuity)
   chat_history    jsonb default '[]',
@@ -360,7 +362,11 @@ Generated as inline SVG in the site template. Upgradeable to a proper logo modul
 4. Built assets uploaded to Supabase Storage
 5. Deployed to Netlify via Deploy API
 
-**Build status:** draft → building → live / error
+**Build status:** draft → building → preview → live / error
+- Builds land in `preview` status (Netlify site, no custom domain)
+- Explicit publish action adds the custom domain and transitions to `live`
+- Unpublish removes the custom domain and returns to `preview`
+- Rebuilds while `live` preserve the live status
 - Real-time status updates via Supabase Realtime subscriptions
 - Error state includes human-readable message
 
@@ -388,9 +394,15 @@ Generated as inline SVG in the site template. Upgradeable to a proper logo modul
 - Archive completed sessions
 
 **Student overview:**
-- Table view: name, email, site status (draft/building/live), completion %, preview link
+- Table view: name, email, site status (draft/building/preview/live), completion %, preview link
 - Click into any student → read-only view of their site spec
 - Filterable by session
+
+**Instructor sites ("My Sites"):**
+- Instructors can create and manage their own sites (demos, personal doula sites)
+- Multiple sites per instructor (no uniqueness guard)
+- Full chat + dashboard flow, same as students
+- Publish/unpublish and delete from the admin "My Sites" page
 
 **Usage/billing:**
 - Claude API token usage per session
@@ -455,11 +467,11 @@ STEP 4: CONTENT
     → faq_enabled
 
 STEP 5: PHOTOS
-  → "Upload a professional photo of yourself. 
-     This will be used on your About page and homepage."
-    (File upload → Supabase Storage → photos[])
-  → "Any other photos you'd like on your site? 
-     You can add more later from your dashboard."
+  → Claude calls trigger_photo_upload tool → inline upload panel appears
+  → Panel supports: Headshot, Hero Image, Gallery (up to 6)
+  → User uploads directly in chat flow via PhotoUploadPanel component
+  → User clicks "Done with photos" → chat resumes
+  → Photos stored in Supabase Storage → photos[] table
 
 STEP 6: CONTACT & PRACTICAL
   → "What's the best email for enquiries?" → email
@@ -469,14 +481,14 @@ STEP 6: CONTACT & PRACTICAL
   → "Are you a Doula UK member?" → doula_uk
   → "Which training provider did you train with?" → training_provider
 
-STEP 7: REVIEW & BUILD
+STEP 7: REVIEW & COMPLETE
   → "Here's a summary of your site:"
     (Display structured summary of all fields)
-  → "Ready to build? I'll generate your site now. 
-     It takes a couple of minutes."
-    [Build My Site] [Let me edit something first]
-  → Trigger build pipeline
-  → "Your site is live! Check it out: https://[slug].birthbuild.com"
+  → When all steps complete, CompletionCard is shown:
+    - Green checkmark + "Your site information is ready!"
+    - Summary grid: business name, services count, style/palette, contact
+    - Buttons: "Upload Photos" (→ /dashboard?tab=photos) and "Go to Dashboard"
+  → User proceeds to dashboard to build and preview their site
 ```
 
 ---

@@ -8,6 +8,7 @@ interface UseSiteSpecReturn {
   loading: boolean;
   error: string | null;
   isStale: boolean;
+  patchLocal: (partial: Partial<SiteSpec>) => void;
   updateSiteSpec: (partial: Partial<SiteSpec>) => Promise<void>;
   createSiteSpec: () => Promise<SiteSpec | null>;
 }
@@ -88,6 +89,12 @@ export function useSiteSpec(siteId?: string): UseSiteSpecReturn {
     (siteSpec.status === "live" || siteSpec.status === "preview") &&
     lastBuildUpdatedAtRef.current !== null &&
     siteSpec.updated_at > lastBuildUpdatedAtRef.current;
+
+  const patchLocal = useCallback((partial: Partial<SiteSpec>) => {
+    setSiteSpec((prev) =>
+      prev ? { ...prev, ...partial, updated_at: new Date().toISOString() } : prev,
+    );
+  }, []);
 
   const updateSiteSpec = useCallback(
     async (partial: Partial<SiteSpec>) => {
@@ -176,6 +183,7 @@ export function useSiteSpec(siteId?: string): UseSiteSpecReturn {
     loading,
     error,
     isStale,
+    patchLocal,
     updateSiteSpec,
     createSiteSpec,
   };

@@ -3,6 +3,7 @@ import type { SiteSpec } from "@/types/site-spec";
 
 interface UseDebouncedSaveOptions {
   updateSiteSpec: (partial: Partial<SiteSpec>) => Promise<void>;
+  patchLocal: (partial: Partial<SiteSpec>) => void;
   delay?: number;
 }
 
@@ -14,6 +15,7 @@ interface UseDebouncedSaveReturn {
 
 export function useDebouncedSave({
   updateSiteSpec,
+  patchLocal,
   delay = 500,
 }: UseDebouncedSaveOptions): UseDebouncedSaveReturn {
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -41,7 +43,10 @@ export function useDebouncedSave({
 
   const debouncedUpdate = useCallback(
     (partial: Partial<SiteSpec>) => {
-      // Merge with any pending updates
+      // Update local state immediately so inputs feel responsive
+      patchLocal(partial);
+
+      // Merge with any pending updates for the debounced remote save
       pendingRef.current = { ...pendingRef.current, ...partial };
       setIsPending(true);
 
@@ -59,7 +64,7 @@ export function useDebouncedSave({
         }
       }, delay);
     },
-    [delay],
+    [delay, patchLocal],
   );
 
   // Flush pending changes on unmount

@@ -37,7 +37,7 @@ const tree = (
     {supabaseMissing ? (
       <MissingEnvScreen />
     ) : (
-      <BrowserRouter>
+      <BrowserRouter basename="/app">
         <AuthProvider>
           <App />
         </AuthProvider>

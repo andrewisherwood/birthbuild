@@ -17,8 +17,8 @@ export default function DashboardPage() {
   const { user, profile, loading: authLoading } = useAuth();
   const [searchParams] = useSearchParams();
   const siteId = searchParams.get("site_id") ?? undefined;
-  const { siteSpec, loading: specLoading, error, isStale, updateSiteSpec } = useSiteSpec(siteId);
-  const { debouncedUpdate } = useDebouncedSave({ updateSiteSpec });
+  const { siteSpec, loading: specLoading, error, isStale, patchLocal, updateSiteSpec } = useSiteSpec(siteId);
+  const { debouncedUpdate } = useDebouncedSave({ updateSiteSpec, patchLocal });
 
   const isInstructor = profile?.role === "instructor";
 

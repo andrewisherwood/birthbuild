@@ -25,10 +25,14 @@ No patterns observed yet
 ## Architecture Patterns
 
 ### What Works
-No patterns observed yet
+- useSiteSpec: extracting `userId = user?.id ?? null` as a stable primitive for useEffect deps avoids re-fetches on token refresh
+- onAuthStateChange as sole session source: eliminates race between getSession() and URL hash token processing on magic link redirects
+- Defensive try/catch around ALL async chains in useEffect: prevents stuck loading states when any step throws
 
 ### What Doesn't Work
-No patterns observed yet
+- **useAuth as a hook (not Context):** 14 independent instances each create their own onAuthStateChange subscription and fetch profile on every auth event. Token refreshes (tab visibility change) cascade across all instances simultaneously. This is the root cause of multiple loading/spinner bugs. Should be refactored to a single AuthProvider context.
+- **useEffect deps on Supabase object references:** `user`, `session`, `profile` objects change identity on every token refresh even when the underlying user hasn't changed. Any useEffect depending on these objects will re-fire unnecessarily.
+- **Deploying auth changes directly to production:** Auth flow is fragile and hard to test without a local Supabase instance. Changes to useAuth broke magic link login in production. Always test auth changes locally first.
 
 ---
 

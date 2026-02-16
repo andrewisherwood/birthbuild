@@ -1,19 +1,20 @@
 # Conductor Working Context
 
-**Last Updated:** 2026-02-16T00:10:00Z
+**Last Updated:** 2026-02-16T16:00:00Z
 **Project:** BirthBuild
-**Status:** MVP live — post-deployment fixes in progress
-**Session:** 2 (live testing & hotfixes)
+**Status:** MVP live — auth/loading bugs partially fixed, architectural refactor needed
+**Session:** 3 (auth fixes + design editor feature)
 
 ## Current State
-- All 6 build phases merged to main
+- All 6 build phases merged to main + design editor feature + auth hotfixes
 - First live site deployed: andrew-isherwood.birthbuild.com
-- 4 Edge Functions deployed: chat (v3), build (v1), invite (v1), generate-link (v1, temporary)
+- 5 Edge Functions deployed: chat (v3), build (v1), invite (v1), generate-link (v1, temporary), design-chat (v1)
 - Supabase project: btkruvwxhyqotofpfbps (eu-west-1)
 - Tenant: "BirthBuild Demo" (831498ce-9777-4fc0-a326-5647862d395a)
-- Test users: hello@andrewisherwood.com (instructor), chefandrewisherwood@gmail.com (student)
+- Test users: hello@andrewisherwood.com (instructor), chefandrewisherwood@gmail.com (student), hello@andrewisherwood.me (student), andrew@bugle.agency (student)
 - Session: "Demo Workshop" (a9ea233f-d417-4615-b04c-b4a75eb17579)
-- 9 known issues from live testing (see STATUS.md)
+- 16 known issues from live testing (see STATUS.md) — 4 fixed, 12 open
+- **Critical architectural issue:** useAuth is a hook, not a shared Context — causes cascading re-renders and loading state bugs across 14 independent instances
 
 ## Phase History (Final)
 

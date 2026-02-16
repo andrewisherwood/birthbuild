@@ -39,7 +39,7 @@
 | # | Issue | Severity | Status |
 |---|-------|----------|--------|
 | 1 | Chat feels slow during tool-use steps (multiple sequential Claude API calls) | Medium | Open |
-| 2 | Text input lag in chat (possible re-render issue) | Medium | Open |
+| 2 | Text input lag in chat (possible re-render issue) | Medium | Fixed (PR #8) |
 | 3 | No "next" button between chat steps — user must prompt manually | Medium | Open |
 | 4 | Chat ↔ dashboard navigation lacks clear flow/CTA | Medium | Open |
 | 5 | Photo thumbnails broken in dashboard (storage URLs not resolving) | Medium | Open |
@@ -47,6 +47,13 @@
 | 7 | Supabase free-tier email rate limits block magic links during testing | Low | Workaround (generate-link Edge Function) |
 | 8 | Custom SMTP (Resend) not configured | Low | Blocked (Resend outage) |
 | 9 | Build status badge still shows "Draft" when viewing wrong site_spec row | Low | Open |
+| 10 | **useAuth is a hook, not a Context** — 14 independent instances create redundant Supabase subscriptions and profile fetches on every auth event | High | Open |
+| 11 | Dashboard spinner flash on tab visibility change (token refresh creates new user object reference) | Medium | Fixed (ead585b) |
+| 12 | Photos tab stuck spinner (missing try/catch around signed URL generation) | Medium | Fixed (3ee3a5c) |
+| 13 | Magic link login fails — getSession() races with URL hash token processing | High | Fixed (73084ed) |
+| 14 | No preview/success message shown after build completes and deploys | High | Open |
+| 15 | Admin pages spinner of death — navigating back to admin after dashboard hangs | High | Open |
+| 16 | useInstructorSites depends on `user` object reference (not stable `userId`), re-fetches on every token refresh | Medium | Open |
 
 ## Review Stats
 
@@ -75,6 +82,31 @@
 | ~23:55 | Deployed build + invite Edge Functions |
 | ~00:00 | NETLIFY_API_TOKEN configured as Edge Function secret |
 | ~00:01 | First live site deployed to andrew-isherwood.birthbuild.com |
+
+## Session 3 — Auth & Loading State Fixes + Design Editor (2026-02-16)
+
+| Commit | Fix |
+|--------|-----|
+| 21bce34 | feat: Natural language design editor with live preview (10 files, edge function, migration) |
+| ead585b | fix: useSiteSpec dependency changed from `user` object to `userId` string — prevents re-fetch on token refresh |
+| 3ee3a5c | fix: usePhotoUpload wrapped fetch in try/catch — prevents stuck loading spinner |
+| 88d3c0a | fix: Reverted broken useAuth optimization that prevented magic link session pickup |
+| 73084ed | fix: Removed getSession() race — use onAuthStateChange as sole session source (Supabase recommended pattern) |
+
+### Root Cause Analysis
+
+Multiple issues traced to a common architectural problem: **`useAuth` is a standalone hook, not a shared React Context**. Each of the 14 call sites creates its own independent state, Supabase `onAuthStateChange` subscription, and profile fetch. When Supabase refreshes the JWT token on tab visibility change, ALL 14 instances fire simultaneously, each fetching the profile and re-rendering their subtree.
+
+**Symptoms observed:**
+- Dashboard loading spinner flash every time the user tabs away and back
+- Photos tab permanently stuck on spinner (async error in one instance prevented loading=false)
+- Magic link login failing (getSession() resolving before hash tokens processed)
+- Admin pages hanging on navigation (suspected: hooks re-initialising with stale/null state during route transition)
+- No build success feedback (suspected: useBuild Realtime subscription lost during re-render cascade)
+
+**What was fixed this session:** Items 11-13 above (individual symptoms patched). The architectural root cause (issue #10) remains open.
+
+**What remains broken:** Items 14-16 above. Build feedback and admin navigation need investigation — likely related to the same auth/loading state architecture.
 
 ## Audit Trail (Session 1 — Build Phase)
 

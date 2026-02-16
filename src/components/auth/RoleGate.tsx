@@ -5,7 +5,7 @@ import type { Profile } from "@/types/database";
 
 interface RoleGateProps {
   children: React.ReactNode;
-  role: Profile["role"];
+  role: Profile["role"] | Profile["role"][];
 }
 
 export function RoleGate({ children, role }: RoleGateProps) {
@@ -19,7 +19,11 @@ export function RoleGate({ children, role }: RoleGateProps) {
     );
   }
 
-  if (userRole !== role) {
+  const allowed = Array.isArray(role)
+    ? userRole !== null && role.includes(userRole)
+    : userRole === role;
+
+  if (!allowed) {
     return <Navigate to="/dashboard" replace />;
   }
 

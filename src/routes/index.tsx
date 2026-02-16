@@ -52,7 +52,7 @@ export default function IndexPage() {
 
   // Redirect authenticated users based on role
   if (user) {
-    if (role === "instructor") {
+    if (role === "admin" || role === "instructor") {
       return <Navigate to="/admin/sessions" replace />;
     }
     return <Navigate to="/dashboard" replace />;

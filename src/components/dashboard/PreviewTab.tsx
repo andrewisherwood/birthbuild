@@ -199,12 +199,11 @@ export function PreviewTab({ siteSpec, onFieldChange, isStale = false }: Preview
     [onFieldChange],
   );
 
-  const handleBuild = useCallback(async () => {
-    if (useLlm) {
-      await triggerLlmBuild();
-    } else {
-      await triggerBuild();
-    }
+  const handleBuild = useCallback(() => {
+    const promise = useLlm ? triggerLlmBuild() : triggerBuild();
+    promise.catch((err: unknown) => {
+      console.error("[PreviewTab] Unhandled build error:", err);
+    });
   }, [useLlm, triggerLlmBuild, triggerBuild]);
 
   const handleLlmToggle = useCallback(

@@ -106,6 +106,79 @@ async function fetchPhotos(specId: string): Promise<{ photos: PhotoData[]; warni
 }
 
 // ---------------------------------------------------------------------------
+// Session validation
+// ---------------------------------------------------------------------------
+
+/**
+ * Ensure the Supabase client has a valid (non-expired) session.
+ *
+ * Avoids calling refreshSession() unless the token is actually expired,
+ * which reduces the risk of racing with the auto-refresh timer under
+ * the no-op navigator.locks override (see supabase.ts). If refreshSession()
+ * fails (e.g. auto-refresh already consumed the refresh token), we fall back
+ * to checking whether auto-refresh updated the session in the meantime.
+ */
+async function ensureValidSession(): Promise<
+  { valid: true } | { valid: false; reason: string }
+> {
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+
+  if (!session) {
+    return {
+      valid: false,
+      reason: "You're not signed in. Please sign in and try again.",
+    };
+  }
+
+  const now = Math.floor(Date.now() / 1000);
+  const expiresAt = session.expires_at ?? 0;
+
+  // Token is still valid (with 30s buffer for network latency)
+  if (expiresAt - now > 30) {
+    return { valid: true };
+  }
+
+  // Token is expired or expiring soon — try an explicit refresh.
+  // The 5s timeout guards against refreshSession() hanging (observed with
+  // the no-op navigator.locks override when the underlying HTTP request stalls).
+  console.log("[useBuild] Access token expired or expiring, attempting refresh…");
+
+  try {
+    const { data, error } = await Promise.race([
+      supabase.auth.refreshSession(),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error("Session refresh timed out")), 5000),
+      ),
+    ]);
+    if (!error && data?.session) {
+      console.log("[useBuild] Session refreshed successfully.");
+      return { valid: true };
+    }
+  } catch {
+    // refreshSession() threw or timed out — fall through to fallback check.
+  }
+
+  // refreshSession failed. This can happen when the auto-refresh timer
+  // already consumed the (single-use) refresh token — a race enabled by the
+  // no-op lock. Check whether auto-refresh updated the cached session.
+  const {
+    data: { session: retrySession },
+  } = await supabase.auth.getSession();
+
+  if (retrySession && (retrySession.expires_at ?? 0) - now > 30) {
+    console.log("[useBuild] Auto-refresh had already updated the session.");
+    return { valid: true };
+  }
+
+  return {
+    valid: false,
+    reason: "Your session has expired. Please sign out and sign back in.",
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Sitemap/robots helpers
 // ---------------------------------------------------------------------------
 
@@ -228,15 +301,10 @@ export function useBuild(siteSpec: SiteSpec | null): UseBuildReturn {
       return;
     }
 
-    // Refresh the session to ensure we have a valid JWT for edge function calls
-    try {
-      const refreshResult = await supabase.auth.refreshSession();
-      if (refreshResult.error || !refreshResult.data?.session) {
-        setBuildError("Your session has expired. Please sign out and sign back in.");
-        return;
-      }
-    } catch {
-      setBuildError("Your session has expired. Please sign out and sign back in.");
+    // Ensure we have a valid session for edge function calls
+    const sessionCheck = await ensureValidSession();
+    if (!sessionCheck.valid) {
+      setBuildError(sessionCheck.reason);
       return;
     }
 
@@ -301,6 +369,8 @@ export function useBuild(siteSpec: SiteSpec | null): UseBuildReturn {
   // -----------------------------------------------------------------
 
   const triggerLlmBuild = useCallback(async () => {
+    console.log("[useBuild] triggerLlmBuild called");
+
     const spec = siteSpecRef.current;
     if (!spec) {
       setBuildError("No site specification loaded.");
@@ -315,17 +385,15 @@ export function useBuild(siteSpec: SiteSpec | null): UseBuildReturn {
       return;
     }
 
-    // Refresh the session to ensure we have a valid JWT for edge function calls
-    try {
-      const refreshResult = await supabase.auth.refreshSession();
-      if (refreshResult.error || !refreshResult.data?.session) {
-        setBuildError("Your session has expired. Please sign out and sign back in.");
-        return;
-      }
-    } catch {
-      setBuildError("Your session has expired. Please sign out and sign back in.");
+    // Ensure we have a valid session for edge function calls
+    console.log("[useBuild] Checking session validity…");
+    const sessionCheck = await ensureValidSession();
+    if (!sessionCheck.valid) {
+      console.warn("[useBuild] Session invalid:", sessionCheck.reason);
+      setBuildError(sessionCheck.reason);
       return;
     }
+    console.log("[useBuild] Session valid, starting LLM build…");
 
     setBuildError(null);
     setBuilding(true);
@@ -337,10 +405,12 @@ export function useBuild(siteSpec: SiteSpec | null): UseBuildReturn {
 
     try {
       // 1. Fetch photos
+      console.log("[useBuild] Fetching photos…");
       const { photos, warnings: photoWarnings } = await fetchPhotos(spec.id);
       setValidationWarnings(photoWarnings);
 
       // 2. Generate design system
+      console.log("[useBuild] Calling generate-design-system…");
       setProgress("design-system");
 
       const { data: dsData, error: dsError } = await supabase.functions.invoke(
@@ -352,6 +422,7 @@ export function useBuild(siteSpec: SiteSpec | null): UseBuildReturn {
         const msg = typeof dsError === "object" && dsError !== null && "message" in dsError
           ? (dsError as { message: string }).message
           : "Failed to generate design system.";
+        console.error("[useBuild] generate-design-system error:", msg);
         setBuildError(msg);
         setProgress("error", 0, 0, msg);
         setBuilding(false);
@@ -369,11 +440,14 @@ export function useBuild(siteSpec: SiteSpec | null): UseBuildReturn {
 
       if (designResponse?.error || !designResponse?.css) {
         const msg = designResponse?.error ?? "Design system generation failed.";
+        console.error("[useBuild] Design system response error:", msg);
         setBuildError(msg);
         setProgress("error", 0, 0, msg);
         setBuilding(false);
         return;
       }
+
+      console.log("[useBuild] Design system generated successfully.");
 
       const designSystem: CheckpointDesignSystem = {
         css: designResponse.css,
@@ -389,9 +463,11 @@ export function useBuild(siteSpec: SiteSpec | null): UseBuildReturn {
         return true;
       });
 
+      console.log("[useBuild] Generating %d page(s): %s", pagesToGenerate.length, pagesToGenerate.join(", "));
       setProgress("pages", 0, pagesToGenerate.length);
 
       const generateSinglePage = async (page: string): Promise<CheckpointPage> => {
+        console.log("[useBuild] Calling generate-page for '%s'…", page);
         const { data, error } = await supabase.functions.invoke("generate-page", {
           body: {
             site_spec_id: spec.id,
@@ -423,6 +499,7 @@ export function useBuild(siteSpec: SiteSpec | null): UseBuildReturn {
           throw new Error(response?.error ?? `Empty response for ${page} page.`);
         }
 
+        console.log("[useBuild] Page '%s' generated → %s", page, response.filename);
         return { filename: response.filename ?? `${page}.html`, html: response.html };
       };
 
@@ -476,6 +553,7 @@ export function useBuild(siteSpec: SiteSpec | null): UseBuildReturn {
       }
 
       // 4. Save checkpoint
+      console.log("[useBuild] Saving checkpoint (%d pages)…", generatedPages.length);
       setProgress("saving");
 
       const { data: maxRow } = await supabase
@@ -515,6 +593,7 @@ export function useBuild(siteSpec: SiteSpec | null): UseBuildReturn {
         .eq("id", spec.id);
 
       // 5. Generate sitemap + robots and deploy
+      console.log("[useBuild] Deploying to Netlify…");
       setProgress("deploying");
 
       const baseUrl = spec.subdomain_slug
@@ -537,6 +616,7 @@ export function useBuild(siteSpec: SiteSpec | null): UseBuildReturn {
           typeof buildErr === "object" && buildErr !== null && "message" in buildErr
             ? (buildErr as { message: string }).message
             : "Deploy failed. Please try again.";
+        console.error("[useBuild] Deploy error:", msg);
         setBuildError(msg);
         setProgress("error", 0, 0, msg);
         setBuilding(false);
@@ -545,12 +625,14 @@ export function useBuild(siteSpec: SiteSpec | null): UseBuildReturn {
 
       const buildResponse = buildData as { success?: boolean; error?: string } | undefined;
       if (buildResponse?.error) {
+        console.error("[useBuild] Deploy response error:", buildResponse.error);
         setBuildError(buildResponse.error);
         setProgress("error", 0, 0, buildResponse.error);
         setBuilding(false);
         return;
       }
 
+      console.log("[useBuild] LLM build complete.");
       setProgress("complete");
 
       // Fetch updated spec to get deploy_url/status (don't rely solely on realtime)

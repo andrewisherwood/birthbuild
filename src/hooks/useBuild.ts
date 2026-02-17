@@ -179,6 +179,45 @@ async function ensureValidSession(): Promise<
 }
 
 // ---------------------------------------------------------------------------
+// Direct edge function invocation (bypasses SDK session handling)
+// ---------------------------------------------------------------------------
+
+/**
+ * Call a Supabase Edge Function directly via fetch, bypassing the SDK's
+ * internal getSession() call. When multiple invoke() calls run concurrently,
+ * the SDK can trigger parallel token refreshes through the no-op lock,
+ * causing requests to hang and never reach the server.
+ *
+ * By using fetch directly with a pre-obtained access token, we avoid this
+ * entirely.
+ */
+async function invokeEdgeFunctionDirect<T = unknown>(
+  functionName: string,
+  body: Record<string, unknown>,
+  accessToken: string,
+): Promise<{ data: T | null; error: { message: string } | null }> {
+  const url = `${import.meta.env.VITE_SUPABASE_URL as string}/functions/v1/${functionName}`;
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${accessToken}`,
+      apikey: import.meta.env.VITE_SUPABASE_ANON_KEY as string,
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    return { data: null, error: { message: text || `HTTP ${response.status}` } };
+  }
+
+  const data = (await response.json()) as T;
+  return { data, error: null };
+}
+
+// ---------------------------------------------------------------------------
 // Sitemap/robots helpers
 // ---------------------------------------------------------------------------
 
@@ -396,7 +435,6 @@ export function useBuild(siteSpec: SiteSpec | null): UseBuildReturn {
       return;
     }
     console.log("[useBuild] Session valid, starting LLM build…");
-    const authHeader = { Authorization: `Bearer ${sessionCheck.accessToken}` };
 
     setBuildError(null);
     setBuilding(true);
@@ -416,30 +454,24 @@ export function useBuild(siteSpec: SiteSpec | null): UseBuildReturn {
       console.log("[useBuild] Calling generate-design-system…");
       setProgress("design-system");
 
-      const { data: dsData, error: dsError } = await supabase.functions.invoke(
-        "generate-design-system",
-        { body: { site_spec_id: spec.id }, headers: authHeader },
-      );
-
-      if (dsError) {
-        const msg = typeof dsError === "object" && dsError !== null && "message" in dsError
-          ? (dsError as { message: string }).message
-          : "Failed to generate design system.";
-        console.error("[useBuild] generate-design-system error:", msg);
-        setBuildError(msg);
-        setProgress("error", 0, 0, msg);
-        setBuilding(false);
-        return;
-      }
-
-      const designResponse = dsData as {
+      const { data: dsData, error: dsError } = await invokeEdgeFunctionDirect<{
         success?: boolean;
         css?: string;
         nav_html?: string;
         footer_html?: string;
         wordmark_svg?: string;
         error?: string;
-      } | undefined;
+      }>("generate-design-system", { site_spec_id: spec.id }, sessionCheck.accessToken);
+
+      if (dsError) {
+        console.error("[useBuild] generate-design-system error:", dsError.message);
+        setBuildError(dsError.message);
+        setProgress("error", 0, 0, dsError.message);
+        setBuilding(false);
+        return;
+      }
+
+      const designResponse = dsData;
 
       if (designResponse?.error || !designResponse?.css) {
         const msg = designResponse?.error ?? "Design system generation failed.";
@@ -460,6 +492,16 @@ export function useBuild(siteSpec: SiteSpec | null): UseBuildReturn {
       };
 
       // 3. Generate pages in parallel
+      //
+      // Re-validate the session before page generation. The design-system
+      // call can take 60s+, so the access token may have expired or be
+      // close to expiry.
+      console.log("[useBuild] Re-checking session before page generation…");
+      const pageSessionCheck = await ensureValidSession();
+      const pageToken = pageSessionCheck.valid
+        ? pageSessionCheck.accessToken
+        : sessionCheck.accessToken; // fall back to original token
+
       const pagesToGenerate = spec.pages.filter((p) => {
         if (p === "testimonials" && spec.testimonials.length === 0) return false;
         if (p === "faq" && !spec.faq_enabled) return false;
@@ -471,8 +513,13 @@ export function useBuild(siteSpec: SiteSpec | null): UseBuildReturn {
 
       const generateSinglePage = async (page: string): Promise<CheckpointPage> => {
         console.log("[useBuild] Calling generate-page for '%s'…", page);
-        const { data, error } = await supabase.functions.invoke("generate-page", {
-          body: {
+        const { data, error } = await invokeEdgeFunctionDirect<{
+          filename?: string;
+          html?: string;
+          error?: string;
+        }>(
+          "generate-page",
+          {
             site_spec_id: spec.id,
             page,
             design_system: {
@@ -487,24 +534,19 @@ export function useBuild(siteSpec: SiteSpec | null): UseBuildReturn {
               altText: p.altText,
             })),
           },
-          headers: authHeader,
-        });
+          pageToken,
+        );
 
         if (error) {
-          throw new Error(
-            typeof error === "object" && error !== null && "message" in error
-              ? (error as { message: string }).message
-              : `Failed to generate ${page} page.`,
-          );
+          throw new Error(error.message || `Failed to generate ${page} page.`);
         }
 
-        const response = data as { filename?: string; html?: string; error?: string } | undefined;
-        if (response?.error || !response?.html) {
-          throw new Error(response?.error ?? `Empty response for ${page} page.`);
+        if (data?.error || !data?.html) {
+          throw new Error(data?.error ?? `Empty response for ${page} page.`);
         }
 
-        console.log("[useBuild] Page '%s' generated → %s", page, response.filename);
-        return { filename: response.filename ?? `${page}.html`, html: response.html };
+        console.log("[useBuild] Page '%s' generated → %s", page, data.filename);
+        return { filename: data.filename ?? `${page}.html`, html: data.html };
       };
 
       // First pass: parallel generation
@@ -611,28 +653,29 @@ export function useBuild(siteSpec: SiteSpec | null): UseBuildReturn {
       files.push({ path: "sitemap.xml", content: generateSitemap(generatedPages, baseUrl) });
       files.push({ path: "robots.txt", content: generateRobotsTxt(baseUrl) });
 
-      const { data: buildData, error: buildErr } = await supabase.functions.invoke("build", {
-        body: { site_spec_id: spec.id, files },
-        headers: authHeader,
-      });
+      // Re-validate session again before deploy (page generation can take minutes)
+      const deploySessionCheck = await ensureValidSession();
+      const deployToken = deploySessionCheck.valid
+        ? deploySessionCheck.accessToken
+        : pageToken;
+
+      const { data: buildData, error: buildErr } = await invokeEdgeFunctionDirect<{
+        success?: boolean;
+        error?: string;
+      }>("build", { site_spec_id: spec.id, files }, deployToken);
 
       if (buildErr) {
-        const msg =
-          typeof buildErr === "object" && buildErr !== null && "message" in buildErr
-            ? (buildErr as { message: string }).message
-            : "Deploy failed. Please try again.";
-        console.error("[useBuild] Deploy error:", msg);
-        setBuildError(msg);
-        setProgress("error", 0, 0, msg);
+        console.error("[useBuild] Deploy error:", buildErr.message);
+        setBuildError(buildErr.message);
+        setProgress("error", 0, 0, buildErr.message);
         setBuilding(false);
         return;
       }
 
-      const buildResponse = buildData as { success?: boolean; error?: string } | undefined;
-      if (buildResponse?.error) {
-        console.error("[useBuild] Deploy response error:", buildResponse.error);
-        setBuildError(buildResponse.error);
-        setProgress("error", 0, 0, buildResponse.error);
+      if (buildData?.error) {
+        console.error("[useBuild] Deploy response error:", buildData.error);
+        setBuildError(buildData.error);
+        setProgress("error", 0, 0, buildData.error);
         setBuilding(false);
         return;
       }

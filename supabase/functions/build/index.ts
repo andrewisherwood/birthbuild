@@ -677,16 +677,39 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
   try {
     if (!netlifySiteId) {
+      const siteName = `birthbuild-${subdomainSlug}`;
+
       // Create a new Netlify site WITHOUT custom_domain (preview only)
       const createResponse = await fetch("https://api.netlify.com/api/v1/sites", {
         method: "POST",
         headers: netlifyHeaders,
-        body: JSON.stringify({
-          name: `birthbuild-${subdomainSlug}`,
-        }),
+        body: JSON.stringify({ name: siteName }),
       });
 
-      if (!createResponse.ok) {
+      if (createResponse.ok) {
+        const siteData = (await createResponse.json()) as { id: string };
+        netlifySiteId = siteData.id;
+      } else if (createResponse.status === 422) {
+        // Name already taken — look up the existing site by subdomain
+        console.warn(`[build] Site name "${siteName}" already exists, looking up…`);
+        const lookupResponse = await fetch(
+          `https://api.netlify.com/api/v1/sites/${siteName}.netlify.app`,
+          { headers: { Authorization: `Bearer ${netlifyApiToken}` } },
+        );
+
+        if (!lookupResponse.ok) {
+          const lookupText = await lookupResponse.text();
+          console.error(
+            `[build] Netlify site lookup failed (HTTP ${lookupResponse.status}):`,
+            lookupText,
+          );
+          throw new Error("Failed to find existing Netlify site");
+        }
+
+        const existingSite = (await lookupResponse.json()) as { id: string };
+        netlifySiteId = existingSite.id;
+        console.log(`[build] Found existing Netlify site: ${netlifySiteId}`);
+      } else {
         const errorText = await createResponse.text();
         console.error(
           `[build] Netlify create site failed (HTTP ${createResponse.status}):`,
@@ -694,9 +717,6 @@ Deno.serve(async (req: Request): Promise<Response> => {
         );
         throw new Error("Failed to create Netlify site");
       }
-
-      const siteData = (await createResponse.json()) as { id: string };
-      netlifySiteId = siteData.id;
     }
 
     // -----------------------------------------------------------------------
@@ -782,6 +802,16 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
   if (updateError) {
     console.error("[build] Failed to update site_spec after deploy:", updateError.message);
+    return new Response(
+      JSON.stringify({
+        error: `Deploy succeeded but DB update failed: ${updateError.message}`,
+        preview_url: previewUrl,
+      }),
+      {
+        status: 502,
+        headers: { ...cors, "Content-Type": "application/json" },
+      },
+    );
   }
 
   // -----------------------------------------------------------------------

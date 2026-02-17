@@ -65,12 +65,17 @@ export function GenerationProgressIndicator({ progress }: GenerationProgressProp
               : 0;
 
   const isError = stage === "error";
+  const isComplete = stage === "complete";
 
   return (
     <div className="mt-4" aria-live="polite" role="status">
       <p
         className={`mb-2 text-sm font-medium ${
-          isError ? "text-red-700" : "text-yellow-800"
+          isError
+            ? "text-red-700"
+            : isComplete
+              ? "text-green-700"
+              : "text-yellow-800"
         }`}
       >
         {label}
@@ -79,9 +84,15 @@ export function GenerationProgressIndicator({ progress }: GenerationProgressProp
         <p className="mb-2 text-sm text-red-600">{error}</p>
       )}
       {!isError && (
-        <div className="h-2 overflow-hidden rounded-full bg-yellow-100">
+        <div
+          className={`h-2 overflow-hidden rounded-full ${
+            isComplete ? "bg-green-100" : "bg-yellow-100"
+          }`}
+        >
           <div
-            className="h-full rounded-full bg-yellow-400 transition-all duration-500"
+            className={`h-full rounded-full transition-all duration-500 ${
+              isComplete ? "bg-green-500" : "bg-yellow-400"
+            }`}
             style={{ width: `${percentage}%` }}
           />
         </div>

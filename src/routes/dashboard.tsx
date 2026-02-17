@@ -1,6 +1,7 @@
 import { Link, useSearchParams } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { useSiteSpec } from "@/hooks/useSiteSpec";
+import { usePhotoUpload } from "@/hooks/usePhotoUpload";
 import { useDebouncedSave } from "@/hooks/useDebouncedSave";
 import { DashboardShell } from "@/components/dashboard/DashboardShell";
 import { BusinessDetailsTab } from "@/components/dashboard/BusinessDetailsTab";
@@ -19,6 +20,7 @@ export default function DashboardPage() {
   const [searchParams] = useSearchParams();
   const siteId = searchParams.get("site_id") ?? undefined;
   const { siteSpec, loading: specLoading, error, isStale, patchLocal, updateSiteSpec } = useSiteSpec(siteId);
+  const { photos } = usePhotoUpload(siteSpec?.id ?? null);
   const { debouncedUpdate } = useDebouncedSave({ updateSiteSpec, patchLocal });
 
   const isInstructor = profile?.role === "instructor";
@@ -91,6 +93,7 @@ export default function DashboardPage() {
       loading={false}
       error={error}
       backLink={isInstructor ? { label: "Back to Admin", to: "/admin/sites" } : undefined}
+      photoCount={photos.length}
     >
       {renderTabContent}
     </DashboardShell>

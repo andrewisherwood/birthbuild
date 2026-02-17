@@ -279,7 +279,7 @@ export function PreviewTab({ siteSpec, onFieldChange, isStale = false }: Preview
         )}
 
         {/* LLM generation progress (replaces simple building animation) */}
-        {building && useLlm && generationProgress && (
+        {useLlm && generationProgress && (
           <GenerationProgressIndicator progress={generationProgress} />
         )}
 

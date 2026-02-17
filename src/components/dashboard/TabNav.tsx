@@ -37,10 +37,11 @@ interface TabNavProps {
   activeTab: TabKey;
   onTabChange: (tab: TabKey) => void;
   siteSpec: SiteSpec;
+  photoCount?: number;
   className?: string;
 }
 
-function isTabComplete(tab: TabKey, siteSpec: SiteSpec): boolean {
+function isTabComplete(tab: TabKey, siteSpec: SiteSpec, photoCount?: number): boolean {
   switch (tab) {
     case "business":
       return Boolean(siteSpec.business_name && siteSpec.doula_name && siteSpec.service_area);
@@ -49,7 +50,7 @@ function isTabComplete(tab: TabKey, siteSpec: SiteSpec): boolean {
     case "content":
       return Boolean(siteSpec.bio);
     case "photos":
-      return false;
+      return (photoCount ?? 0) > 0;
     case "contact":
       return Boolean(siteSpec.email);
     case "seo":
@@ -67,6 +68,7 @@ export function TabNav({
   activeTab,
   onTabChange,
   siteSpec,
+  photoCount,
   className = "",
 }: TabNavProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -136,7 +138,7 @@ export function TabNav({
         <nav className="flex min-w-max gap-0">
           {TABS.filter((tab) => !tab.showWhen || tab.showWhen(siteSpec)).map((tab) => {
             const isActive = activeTab === tab.key;
-            const isComplete = isTabComplete(tab.key, siteSpec);
+            const isComplete = isTabComplete(tab.key, siteSpec, photoCount);
 
             return (
               <button

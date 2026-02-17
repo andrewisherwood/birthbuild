@@ -172,7 +172,7 @@ export const CHAT_TOOLS: ClaudeToolDefinition[] = [
   {
     name: "generate_content",
     description:
-      "Generate AI-written content for a specific field based on context from the conversation. Present the generated content for the user's approval before saving it.",
+      "Signal that you are generating AI-written content for a specific field. Always call update_content in the same response to save the generated text immediately.",
     input_schema: {
       type: "object",
       properties: {

@@ -528,7 +528,24 @@ export function useBuild(siteSpec: SiteSpec | null): UseBuildReturn {
       }
 
       setProgress("complete");
-      // Realtime subscription will handle status updates from here
+
+      // Fetch updated spec to get deploy_url/status (don't rely solely on realtime)
+      const { data: updatedSpec } = await supabase
+        .from("site_specs")
+        .select("status, deploy_url, preview_url, subdomain_slug")
+        .eq("id", spec.id)
+        .single();
+
+      if (updatedSpec) {
+        setLastBuildStatus({
+          status: (updatedSpec.status as SiteSpecStatus) ?? "preview",
+          deploy_url: updatedSpec.deploy_url as string | null,
+          preview_url: updatedSpec.preview_url as string | null,
+          subdomain_slug: updatedSpec.subdomain_slug as string | null,
+        });
+      }
+
+      setBuilding(false);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "An unexpected error occurred.";
       console.error("[useBuild] LLM build error:", message);

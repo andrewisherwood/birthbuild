@@ -359,7 +359,7 @@ Use the output_page tool to return the complete HTML page.`;
       },
       body: JSON.stringify({
         model: "claude-sonnet-4-5-20250929",
-        max_tokens: 4096,
+        max_tokens: 16384,
         system: systemPrompt,
         messages: [{ role: "user", content: userMessage }],
         tools: [OUTPUT_TOOL],
@@ -390,14 +390,34 @@ Use the output_page tool to return the complete HTML page.`;
   }
 
   // deno-lint-ignore no-explicit-any
-  const claudeData: any = await claudeResponse.json();
+  let claudeData: any;
+  try {
+    claudeData = await claudeResponse.json();
+  } catch (parseErr: unknown) {
+    const detail = parseErr instanceof Error ? parseErr.message : "Unknown parse error";
+    console.error(`[generate-page:${body.page}] Failed to parse Claude response:`, detail);
+    return jsonResponse(
+      { error: `Failed to generate ${body.page} page. Please try again.` },
+      500,
+      cors,
+    );
+  }
+
+  if (claudeData.stop_reason === "max_tokens") {
+    console.error(`[generate-page:${body.page}] Claude hit max_tokens limit`);
+  }
+
   const toolUse = claudeData.content?.find(
     // deno-lint-ignore no-explicit-any
     (block: any) => block.type === "tool_use" && block.name === "output_page",
   );
 
   if (!toolUse?.input?.html) {
-    console.error(`[generate-page:${body.page}] No tool_use block in Claude response`);
+    console.error(
+      `[generate-page:${body.page}] No tool_use block. stop_reason=${claudeData.stop_reason}, content_types=${
+        claudeData.content?.map((b: { type: string }) => b.type).join(",") ?? "none"
+      }`,
+    );
     return jsonResponse(
       { error: `Failed to generate ${body.page} page. Please try again.` },
       500,

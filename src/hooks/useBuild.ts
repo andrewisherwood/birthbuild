@@ -119,7 +119,7 @@ async function fetchPhotos(specId: string): Promise<{ photos: PhotoData[]; warni
  * to checking whether auto-refresh updated the session in the meantime.
  */
 async function ensureValidSession(): Promise<
-  { valid: true } | { valid: false; reason: string }
+  { valid: true; accessToken: string } | { valid: false; reason: string }
 > {
   const {
     data: { session },
@@ -137,7 +137,7 @@ async function ensureValidSession(): Promise<
 
   // Token is still valid (with 30s buffer for network latency)
   if (expiresAt - now > 30) {
-    return { valid: true };
+    return { valid: true, accessToken: session.access_token };
   }
 
   // Token is expired or expiring soon — try an explicit refresh.
@@ -154,7 +154,7 @@ async function ensureValidSession(): Promise<
     ]);
     if (!error && data?.session) {
       console.log("[useBuild] Session refreshed successfully.");
-      return { valid: true };
+      return { valid: true, accessToken: data.session.access_token };
     }
   } catch {
     // refreshSession() threw or timed out — fall through to fallback check.
@@ -169,7 +169,7 @@ async function ensureValidSession(): Promise<
 
   if (retrySession && (retrySession.expires_at ?? 0) - now > 30) {
     console.log("[useBuild] Auto-refresh had already updated the session.");
-    return { valid: true };
+    return { valid: true, accessToken: retrySession.access_token };
   }
 
   return {
@@ -307,6 +307,7 @@ export function useBuild(siteSpec: SiteSpec | null): UseBuildReturn {
       setBuildError(sessionCheck.reason);
       return;
     }
+    const authHeader = { Authorization: `Bearer ${sessionCheck.accessToken}` };
 
     setBuildError(null);
     setBuilding(true);
@@ -339,6 +340,7 @@ export function useBuild(siteSpec: SiteSpec | null): UseBuildReturn {
 
       const { data, error } = await supabase.functions.invoke("build", {
         body: { site_spec_id: spec.id, files },
+        headers: authHeader,
       });
 
       if (error) {
@@ -394,6 +396,7 @@ export function useBuild(siteSpec: SiteSpec | null): UseBuildReturn {
       return;
     }
     console.log("[useBuild] Session valid, starting LLM build…");
+    const authHeader = { Authorization: `Bearer ${sessionCheck.accessToken}` };
 
     setBuildError(null);
     setBuilding(true);
@@ -415,7 +418,7 @@ export function useBuild(siteSpec: SiteSpec | null): UseBuildReturn {
 
       const { data: dsData, error: dsError } = await supabase.functions.invoke(
         "generate-design-system",
-        { body: { site_spec_id: spec.id } },
+        { body: { site_spec_id: spec.id }, headers: authHeader },
       );
 
       if (dsError) {
@@ -484,6 +487,7 @@ export function useBuild(siteSpec: SiteSpec | null): UseBuildReturn {
               altText: p.altText,
             })),
           },
+          headers: authHeader,
         });
 
         if (error) {
@@ -609,6 +613,7 @@ export function useBuild(siteSpec: SiteSpec | null): UseBuildReturn {
 
       const { data: buildData, error: buildErr } = await supabase.functions.invoke("build", {
         body: { site_spec_id: spec.id, files },
+        headers: authHeader,
       });
 
       if (buildErr) {

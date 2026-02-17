@@ -229,8 +229,13 @@ export function useBuild(siteSpec: SiteSpec | null): UseBuildReturn {
     }
 
     // Refresh the session to ensure we have a valid JWT for edge function calls
-    const { data: { session }, error: refreshError } = await supabase.auth.refreshSession();
-    if (refreshError || !session) {
+    try {
+      const refreshResult = await supabase.auth.refreshSession();
+      if (refreshResult.error || !refreshResult.data?.session) {
+        setBuildError("Your session has expired. Please sign out and sign back in.");
+        return;
+      }
+    } catch {
       setBuildError("Your session has expired. Please sign out and sign back in.");
       return;
     }
@@ -311,8 +316,13 @@ export function useBuild(siteSpec: SiteSpec | null): UseBuildReturn {
     }
 
     // Refresh the session to ensure we have a valid JWT for edge function calls
-    const { data: { session }, error: refreshError } = await supabase.auth.refreshSession();
-    if (refreshError || !session) {
+    try {
+      const refreshResult = await supabase.auth.refreshSession();
+      if (refreshResult.error || !refreshResult.data?.session) {
+        setBuildError("Your session has expired. Please sign out and sign back in.");
+        return;
+      }
+    } catch {
       setBuildError("Your session has expired. Please sign out and sign back in.");
       return;
     }

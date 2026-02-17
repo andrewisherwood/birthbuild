@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -181,6 +181,15 @@ export function PreviewTab({ siteSpec, onFieldChange, isStale = false }: Preview
   const subdomainValue =
     siteSpec.subdomain_slug ??
     (siteSpec.doula_name ? slugifySubdomain(siteSpec.doula_name) : "");
+
+  // Auto-persist computed subdomain so the DB stays in sync with the UI
+  const autoPersistedRef = useRef(false);
+  useEffect(() => {
+    if (!siteSpec.subdomain_slug && subdomainValue && !autoPersistedRef.current) {
+      autoPersistedRef.current = true;
+      onFieldChange({ subdomain_slug: subdomainValue });
+    }
+  }, [siteSpec.subdomain_slug, subdomainValue, onFieldChange]);
 
   const handleSubdomainChange = useCallback(
     (value: string) => {

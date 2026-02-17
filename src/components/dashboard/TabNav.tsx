@@ -8,11 +8,14 @@ export type TabKey =
   | "photos"
   | "contact"
   | "seo"
-  | "preview";
+  | "preview"
+  | "editor";
 
 interface Tab {
   key: TabKey;
   label: string;
+  /** Only show this tab when the predicate returns true */
+  showWhen?: (spec: SiteSpec) => boolean;
 }
 
 const TABS: Tab[] = [
@@ -23,6 +26,11 @@ const TABS: Tab[] = [
   { key: "contact", label: "Contact & Social" },
   { key: "seo", label: "SEO" },
   { key: "preview", label: "Preview & Publish" },
+  {
+    key: "editor",
+    label: "Site Editor",
+    showWhen: (spec) => spec.use_llm_generation && spec.latest_checkpoint_id !== null,
+  },
 ];
 
 interface TabNavProps {
@@ -41,7 +49,6 @@ function isTabComplete(tab: TabKey, siteSpec: SiteSpec): boolean {
     case "content":
       return Boolean(siteSpec.bio);
     case "photos":
-      // Photos are optional, mark complete if at least one field elsewhere is filled
       return false;
     case "contact":
       return Boolean(siteSpec.email);
@@ -49,6 +56,8 @@ function isTabComplete(tab: TabKey, siteSpec: SiteSpec): boolean {
       return Boolean(siteSpec.primary_keyword);
     case "preview":
       return siteSpec.status === "live" || siteSpec.status === "preview";
+    case "editor":
+      return false;
     default:
       return false;
   }
@@ -125,7 +134,7 @@ export function TabNav({
         aria-label="Dashboard sections"
       >
         <nav className="flex min-w-max gap-0">
-          {TABS.map((tab) => {
+          {TABS.filter((tab) => !tab.showWhen || tab.showWhen(siteSpec)).map((tab) => {
             const isActive = activeTab === tab.key;
             const isComplete = isTabComplete(tab.key, siteSpec);
 

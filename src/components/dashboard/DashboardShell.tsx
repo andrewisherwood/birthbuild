@@ -8,7 +8,7 @@ import { ProgressIndicator } from "@/components/dashboard/ProgressIndicator";
 import type { TabKey } from "@/components/dashboard/TabNav";
 import type { SiteSpec } from "@/types/site-spec";
 
-const VALID_TABS: TabKey[] = ["business", "design", "content", "photos", "contact", "seo", "preview"];
+const VALID_TABS: TabKey[] = ["business", "design", "content", "photos", "contact", "seo", "preview", "editor"];
 
 interface DashboardShellProps {
   siteSpec: SiteSpec;

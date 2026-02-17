@@ -10,6 +10,7 @@ import { PhotosTab } from "@/components/dashboard/PhotosTab";
 import { ContactTab } from "@/components/dashboard/ContactTab";
 import { SeoTab } from "@/components/dashboard/SeoTab";
 import { PreviewTab } from "@/components/dashboard/PreviewTab";
+import { SiteEditorTab } from "@/components/dashboard/SiteEditorTab";
 import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
 import type { TabKey } from "@/components/dashboard/TabNav";
 
@@ -79,6 +80,8 @@ export default function DashboardPage() {
         return <SeoTab siteSpec={spec} onFieldChange={debouncedUpdate} />;
       case "preview":
         return <PreviewTab siteSpec={spec} onFieldChange={debouncedUpdate} isStale={isStale} />;
+      case "editor":
+        return <SiteEditorTab siteSpec={spec} />;
     }
   }
 

@@ -14,6 +14,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { supabase } from "@/lib/supabase";
+import { getAccessTokenDirect, invokeEdgeFunctionBypass } from "@/lib/auth-bypass";
 import { generateSite } from "@/lib/site-generator";
 import { getPaletteColours, meetsContrastAA } from "@/lib/palettes";
 import type { SiteSpec, SiteSpecStatus, CheckpointPage, CheckpointDesignSystem } from "@/types/site-spec";
@@ -110,112 +111,34 @@ async function fetchPhotos(specId: string): Promise<{ photos: PhotoData[]; warni
 // ---------------------------------------------------------------------------
 
 /**
- * Ensure the Supabase client has a valid (non-expired) session.
+ * Ensure we have a valid access token.
  *
- * Avoids calling refreshSession() unless the token is actually expired,
- * which reduces the risk of racing with the auto-refresh timer under
- * the no-op navigator.locks override (see supabase.ts). If refreshSession()
- * fails (e.g. auto-refresh already consumed the refresh token), we fall back
- * to checking whether auto-refresh updated the session in the meantime.
+ * Uses getAccessTokenDirect() which reads from localStorage and refreshes
+ * via raw fetch — completely bypassing the SDK's auth lock that can hang
+ * when corrupted by React 18 double-mounts or WebSocket reconnection races.
  */
 async function ensureValidSession(): Promise<
   { valid: true; accessToken: string } | { valid: false; reason: string }
 > {
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
+  const accessToken = await getAccessTokenDirect();
 
-  if (!session) {
+  if (!accessToken) {
     return {
       valid: false,
-      reason: "You're not signed in. Please sign in and try again.",
+      reason: "Your session has expired. Please sign out and sign back in.",
     };
   }
 
-  const now = Math.floor(Date.now() / 1000);
-  const expiresAt = session.expires_at ?? 0;
-
-  // Token is still valid (with 30s buffer for network latency)
-  if (expiresAt - now > 30) {
-    return { valid: true, accessToken: session.access_token };
-  }
-
-  // Token is expired or expiring soon — try an explicit refresh.
-  // The 5s timeout guards against refreshSession() hanging (observed with
-  // the no-op navigator.locks override when the underlying HTTP request stalls).
-  console.log("[useBuild] Access token expired or expiring, attempting refresh…");
-
-  try {
-    const { data, error } = await Promise.race([
-      supabase.auth.refreshSession(),
-      new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error("Session refresh timed out")), 5000),
-      ),
-    ]);
-    if (!error && data?.session) {
-      console.log("[useBuild] Session refreshed successfully.");
-      return { valid: true, accessToken: data.session.access_token };
-    }
-  } catch {
-    // refreshSession() threw or timed out — fall through to fallback check.
-  }
-
-  // refreshSession failed. This can happen when the auto-refresh timer
-  // already consumed the (single-use) refresh token — a race enabled by the
-  // no-op lock. Check whether auto-refresh updated the cached session.
-  const {
-    data: { session: retrySession },
-  } = await supabase.auth.getSession();
-
-  if (retrySession && (retrySession.expires_at ?? 0) - now > 30) {
-    console.log("[useBuild] Auto-refresh had already updated the session.");
-    return { valid: true, accessToken: retrySession.access_token };
-  }
-
-  return {
-    valid: false,
-    reason: "Your session has expired. Please sign out and sign back in.",
-  };
+  return { valid: true, accessToken };
 }
 
 // ---------------------------------------------------------------------------
 // Direct edge function invocation (bypasses SDK session handling)
 // ---------------------------------------------------------------------------
 
-/**
- * Call a Supabase Edge Function directly via fetch, bypassing the SDK's
- * internal getSession() call. When multiple invoke() calls run concurrently,
- * the SDK can trigger parallel token refreshes through the no-op lock,
- * causing requests to hang and never reach the server.
- *
- * By using fetch directly with a pre-obtained access token, we avoid this
- * entirely.
- */
-async function invokeEdgeFunctionDirect<T = unknown>(
-  functionName: string,
-  body: Record<string, unknown>,
-  accessToken: string,
-): Promise<{ data: T | null; error: { message: string } | null }> {
-  const url = `${import.meta.env.VITE_SUPABASE_URL as string}/functions/v1/${functionName}`;
-
-  const response = await fetch(url, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${accessToken}`,
-      apikey: import.meta.env.VITE_SUPABASE_ANON_KEY as string,
-    },
-    body: JSON.stringify(body),
-  });
-
-  if (!response.ok) {
-    const text = await response.text();
-    return { data: null, error: { message: text || `HTTP ${response.status}` } };
-  }
-
-  const data = (await response.json()) as T;
-  return { data, error: null };
-}
+// invokeEdgeFunctionBypass is now provided by @/lib/auth-bypass as
+// invokeEdgeFunctionBypass — wraps getAccessTokenDirect() + raw fetch
+// so every edge function call is fully SDK-independent.
 
 // ---------------------------------------------------------------------------
 // Sitemap/robots helpers
@@ -346,7 +269,8 @@ export function useBuild(siteSpec: SiteSpec | null): UseBuildReturn {
       setBuildError(sessionCheck.reason);
       return;
     }
-    const authHeader = { Authorization: `Bearer ${sessionCheck.accessToken}` };
+    // accessToken is used below only as a pre-check; actual edge function
+    // calls use invokeEdgeFunctionBypass which obtains its own token.
 
     setBuildError(null);
     setBuilding(true);
@@ -377,24 +301,19 @@ export function useBuild(siteSpec: SiteSpec | null): UseBuildReturn {
       files.push({ path: "sitemap.xml", content: site.sitemap });
       files.push({ path: "robots.txt", content: site.robots });
 
-      const { data, error } = await supabase.functions.invoke("build", {
-        body: { site_spec_id: spec.id, files },
-        headers: authHeader,
-      });
+      const { data, error } = await invokeEdgeFunctionBypass<{
+        success?: boolean;
+        error?: string;
+      }>("build", { site_spec_id: spec.id, files });
 
       if (error) {
-        const message =
-          typeof error === "object" && error !== null && "message" in error
-            ? (error as { message: string }).message
-            : "Build failed. Please try again.";
-        setBuildError(message);
+        setBuildError(error);
         setBuilding(false);
         return;
       }
 
-      const response = data as { success?: boolean; error?: string } | undefined;
-      if (response?.error) {
-        setBuildError(response.error);
+      if (data?.error) {
+        setBuildError(data.error);
         setBuilding(false);
       }
     } catch (err: unknown) {
@@ -454,19 +373,19 @@ export function useBuild(siteSpec: SiteSpec | null): UseBuildReturn {
       console.log("[useBuild] Calling generate-design-system…");
       setProgress("design-system");
 
-      const { data: dsData, error: dsError } = await invokeEdgeFunctionDirect<{
+      const { data: dsData, error: dsError } = await invokeEdgeFunctionBypass<{
         success?: boolean;
         css?: string;
         nav_html?: string;
         footer_html?: string;
         wordmark_svg?: string;
         error?: string;
-      }>("generate-design-system", { site_spec_id: spec.id }, sessionCheck.accessToken);
+      }>("generate-design-system", { site_spec_id: spec.id });
 
       if (dsError) {
-        console.error("[useBuild] generate-design-system error:", dsError.message);
-        setBuildError(dsError.message);
-        setProgress("error", 0, 0, dsError.message);
+        console.error("[useBuild] generate-design-system error:", dsError);
+        setBuildError(dsError);
+        setProgress("error", 0, 0, dsError);
         setBuilding(false);
         return;
       }
@@ -494,13 +413,8 @@ export function useBuild(siteSpec: SiteSpec | null): UseBuildReturn {
       // 3. Generate pages in parallel
       //
       // Re-validate the session before page generation. The design-system
-      // call can take 60s+, so the access token may have expired or be
-      // close to expiry.
-      console.log("[useBuild] Re-checking session before page generation…");
-      const pageSessionCheck = await ensureValidSession();
-      const pageToken = pageSessionCheck.valid
-        ? pageSessionCheck.accessToken
-        : sessionCheck.accessToken; // fall back to original token
+      // No need for an explicit session re-check: invokeEdgeFunctionBypass
+      // reads the token from localStorage and refreshes automatically.
 
       const pagesToGenerate = spec.pages.filter((p) => {
         if (p === "testimonials" && spec.testimonials.length === 0) return false;
@@ -513,7 +427,7 @@ export function useBuild(siteSpec: SiteSpec | null): UseBuildReturn {
 
       const generateSinglePage = async (page: string): Promise<CheckpointPage> => {
         console.log("[useBuild] Calling generate-page for '%s'…", page);
-        const { data, error } = await invokeEdgeFunctionDirect<{
+        const { data, error } = await invokeEdgeFunctionBypass<{
           filename?: string;
           html?: string;
           error?: string;
@@ -534,11 +448,10 @@ export function useBuild(siteSpec: SiteSpec | null): UseBuildReturn {
               altText: p.altText,
             })),
           },
-          pageToken,
         );
 
         if (error) {
-          throw new Error(error.message || `Failed to generate ${page} page.`);
+          throw new Error(error || `Failed to generate ${page} page.`);
         }
 
         if (data?.error || !data?.html) {
@@ -653,21 +566,15 @@ export function useBuild(siteSpec: SiteSpec | null): UseBuildReturn {
       files.push({ path: "sitemap.xml", content: generateSitemap(generatedPages, baseUrl) });
       files.push({ path: "robots.txt", content: generateRobotsTxt(baseUrl) });
 
-      // Re-validate session again before deploy (page generation can take minutes)
-      const deploySessionCheck = await ensureValidSession();
-      const deployToken = deploySessionCheck.valid
-        ? deploySessionCheck.accessToken
-        : pageToken;
-
-      const { data: buildData, error: buildErr } = await invokeEdgeFunctionDirect<{
+      const { data: buildData, error: buildErr } = await invokeEdgeFunctionBypass<{
         success?: boolean;
         error?: string;
-      }>("build", { site_spec_id: spec.id, files }, deployToken);
+      }>("build", { site_spec_id: spec.id, files });
 
       if (buildErr) {
-        console.error("[useBuild] Deploy error:", buildErr.message);
-        setBuildError(buildErr.message);
-        setProgress("error", 0, 0, buildErr.message);
+        console.error("[useBuild] Deploy error:", buildErr);
+        setBuildError(buildErr);
+        setProgress("error", 0, 0, buildErr);
         setBuilding(false);
         return;
       }

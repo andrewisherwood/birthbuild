@@ -228,6 +228,13 @@ export function useBuild(siteSpec: SiteSpec | null): UseBuildReturn {
       return;
     }
 
+    // Ensure we have a valid session before making edge function calls
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
+      setBuildError("Your session has expired. Please sign in again.");
+      return;
+    }
+
     setBuildError(null);
     setBuilding(true);
     setValidationWarnings([]);
@@ -300,6 +307,13 @@ export function useBuild(siteSpec: SiteSpec | null): UseBuildReturn {
       setBuildError(
         `Please complete the following before building: ${missing.join(", ")}.`,
       );
+      return;
+    }
+
+    // Ensure we have a valid session before making edge function calls
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
+      setBuildError("Your session has expired. Please sign in again.");
       return;
     }
 

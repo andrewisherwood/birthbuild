@@ -22,14 +22,39 @@ export const supabase: SupabaseClient = supabaseMissing
       supabaseAnonKey as string,
       {
         auth: {
-          // Bypass navigator.locks entirely. The default navigatorLock throws
-          // AbortError and processLock times out — both caused by React 18
-          // Strict Mode double-mounting, which creates competing lock requests.
-          // A no-op lock (same as Supabase uses when navigator.locks is
-          // unavailable) is safe for a single-tab SPA.
-          lock: async <R>(_name: string, _acquireTimeout: number, fn: () => Promise<R>): Promise<R> => {
-            return await fn();
-          },
+          // In-memory queue-based mutex for auth operations.
+          //
+          // navigator.locks (the default) causes AbortError and processLock
+          // timeouts with React 18 Strict Mode double-mounting.
+          //
+          // A no-op lock (previous approach) allows concurrent token refreshes
+          // that corrupt the auth module's internal state, causing subsequent
+          // SDK calls (queries, invoke) to hang indefinitely — the HTTP
+          // request is never sent.
+          //
+          // This mutex serializes auth operations (token refresh, session
+          // retrieval) as the SDK expects, without cross-tab lock issues.
+          lock: (() => {
+            let chain: Promise<void> = Promise.resolve();
+            return async <R>(
+              _name: string,
+              _acquireTimeout: number,
+              fn: () => Promise<R>,
+            ): Promise<R> => {
+              let release!: () => void;
+              const gate = new Promise<void>((r) => {
+                release = r;
+              });
+              const previous = chain;
+              chain = gate;
+              await previous;
+              try {
+                return await fn();
+              } finally {
+                release();
+              }
+            };
+          })(),
         },
       },
     ));

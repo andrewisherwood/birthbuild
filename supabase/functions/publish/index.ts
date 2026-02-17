@@ -317,6 +317,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
           headers: netlifyHeaders,
           body: JSON.stringify({
             custom_domain: `${subdomainSlug}.birthbuild.com`,
+            force_ssl: true,
           }),
         },
       );

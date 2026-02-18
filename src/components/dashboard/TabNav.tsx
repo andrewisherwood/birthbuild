@@ -8,11 +8,14 @@ export type TabKey =
   | "photos"
   | "contact"
   | "seo"
-  | "preview";
+  | "preview"
+  | "editor";
 
 interface Tab {
   key: TabKey;
   label: string;
+  /** Only show this tab when the predicate returns true */
+  showWhen?: (spec: SiteSpec) => boolean;
 }
 
 const TABS: Tab[] = [
@@ -23,16 +26,22 @@ const TABS: Tab[] = [
   { key: "contact", label: "Contact & Social" },
   { key: "seo", label: "SEO" },
   { key: "preview", label: "Preview & Publish" },
+  {
+    key: "editor",
+    label: "Site Editor",
+    showWhen: (spec) => spec.use_llm_generation && spec.latest_checkpoint_id !== null,
+  },
 ];
 
 interface TabNavProps {
   activeTab: TabKey;
   onTabChange: (tab: TabKey) => void;
   siteSpec: SiteSpec;
+  photoCount?: number;
   className?: string;
 }
 
-function isTabComplete(tab: TabKey, siteSpec: SiteSpec): boolean {
+function isTabComplete(tab: TabKey, siteSpec: SiteSpec, photoCount?: number): boolean {
   switch (tab) {
     case "business":
       return Boolean(siteSpec.business_name && siteSpec.doula_name && siteSpec.service_area);
@@ -41,14 +50,15 @@ function isTabComplete(tab: TabKey, siteSpec: SiteSpec): boolean {
     case "content":
       return Boolean(siteSpec.bio);
     case "photos":
-      // Photos are optional, mark complete if at least one field elsewhere is filled
-      return false;
+      return (photoCount ?? 0) > 0;
     case "contact":
       return Boolean(siteSpec.email);
     case "seo":
       return Boolean(siteSpec.primary_keyword);
     case "preview":
       return siteSpec.status === "live" || siteSpec.status === "preview";
+    case "editor":
+      return false;
     default:
       return false;
   }
@@ -58,6 +68,7 @@ export function TabNav({
   activeTab,
   onTabChange,
   siteSpec,
+  photoCount,
   className = "",
 }: TabNavProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -125,9 +136,9 @@ export function TabNav({
         aria-label="Dashboard sections"
       >
         <nav className="flex min-w-max gap-0">
-          {TABS.map((tab) => {
+          {TABS.filter((tab) => !tab.showWhen || tab.showWhen(siteSpec)).map((tab) => {
             const isActive = activeTab === tab.key;
-            const isComplete = isTabComplete(tab.key, siteSpec);
+            const isComplete = isTabComplete(tab.key, siteSpec, photoCount);
 
             return (
               <button

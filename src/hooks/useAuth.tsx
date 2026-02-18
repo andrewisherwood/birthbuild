@@ -131,14 +131,23 @@ export function AuthProvider({ children }: AuthProviderProps) {
   );
 
   const signOut = useCallback(async () => {
-    // Always clear client state, even if the server call fails.
+    // Always clear client state, even if the server call fails or hangs.
     // A failed signOut must never leave the user in a ghost session
     // where the server session is cleared but the UI still shows as
     // authenticated (causing RLS to block every subsequent query).
+    //
+    // The 5s timeout guards against supabase.auth.signOut() hanging
+    // (observed with the no-op navigator.locks override when the
+    // underlying HTTP request stalls).
     try {
-      await supabase.auth.signOut();
+      await Promise.race([
+        supabase.auth.signOut(),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error("Sign-out timed out")), 5000),
+        ),
+      ]);
     } catch {
-      // Server call failed — clear local state anyway.
+      // Server call failed or timed out — clear local state anyway.
     }
     setUser(null);
     setSession(null);

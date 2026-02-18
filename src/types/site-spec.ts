@@ -141,10 +141,40 @@ export interface SiteSpec {
   deploy_url: string | null;
   preview_url: string | null;
 
+  // LLM generation
+  use_llm_generation: boolean;
+  latest_checkpoint_id: string | null;
+
   // Chat history
   chat_history: ChatMessage[];
 
   // Metadata
   created_at: string;
   updated_at: string;
+}
+
+// ---------------------------------------------------------------------------
+// Checkpoint types
+// ---------------------------------------------------------------------------
+
+export interface CheckpointPage {
+  filename: string;
+  html: string;
+}
+
+export interface CheckpointDesignSystem {
+  css: string;
+  nav_html: string;
+  footer_html: string;
+  wordmark_svg?: string;
+}
+
+export interface SiteCheckpoint {
+  id: string;
+  site_spec_id: string;
+  version: number;
+  html_pages: { pages: CheckpointPage[] };
+  design_system: CheckpointDesignSystem | null;
+  label: string | null;
+  created_at: string;
 }

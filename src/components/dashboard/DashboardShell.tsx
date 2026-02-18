@@ -8,7 +8,7 @@ import { ProgressIndicator } from "@/components/dashboard/ProgressIndicator";
 import type { TabKey } from "@/components/dashboard/TabNav";
 import type { SiteSpec } from "@/types/site-spec";
 
-const VALID_TABS: TabKey[] = ["business", "design", "content", "photos", "contact", "seo", "preview"];
+const VALID_TABS: TabKey[] = ["business", "design", "content", "photos", "contact", "seo", "preview", "editor"];
 
 interface DashboardShellProps {
   siteSpec: SiteSpec;
@@ -16,6 +16,7 @@ interface DashboardShellProps {
   error: string | null;
   children: (activeTab: TabKey) => React.ReactNode;
   backLink?: { label: string; to: string };
+  photoCount?: number;
 }
 
 export function DashboardShell({
@@ -24,6 +25,7 @@ export function DashboardShell({
   error,
   children,
   backLink,
+  photoCount,
 }: DashboardShellProps) {
   const { signOut } = useAuth();
   const [searchParams] = useSearchParams();
@@ -94,6 +96,7 @@ export function DashboardShell({
         activeTab={activeTab}
         onTabChange={setActiveTab}
         siteSpec={siteSpec}
+        photoCount={photoCount}
         className="bg-white"
       />
 

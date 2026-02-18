@@ -1,5 +1,5 @@
 import { useState, useCallback } from "react";
-import { supabase } from "@/lib/supabase";
+import { invokeEdgeFunctionBypass } from "@/lib/auth-bypass";
 import type { SiteSpec } from "@/types/site-spec";
 
 interface UsePublishOptions {
@@ -27,23 +27,19 @@ export function usePublish(siteSpec: SiteSpec | null, options?: UsePublishOption
     setPublishError(null);
 
     try {
-      const { data, error } = await supabase.functions.invoke("publish", {
-        body: { site_spec_id: siteSpec.id, action: "publish" },
-      });
+      const { data, error } = await invokeEdgeFunctionBypass<{
+        success?: boolean;
+        error?: string;
+        deploy_url?: string;
+      }>("publish", { site_spec_id: siteSpec.id, action: "publish" });
 
       if (error) {
-        const message =
-          typeof error === "object" && error !== null && "message" in error
-            ? (error as { message: string }).message
-            : "Publish failed. Please try again.";
-        setPublishError(message);
-        setPublishing(false);
+        setPublishError(error);
         return;
       }
 
-      const response = data as { success?: boolean; error?: string } | undefined;
-      if (response?.error) {
-        setPublishError(response.error);
+      if (data?.error) {
+        setPublishError(data.error);
       } else {
         options?.onComplete?.();
       }
@@ -66,23 +62,18 @@ export function usePublish(siteSpec: SiteSpec | null, options?: UsePublishOption
     setPublishError(null);
 
     try {
-      const { data, error } = await supabase.functions.invoke("publish", {
-        body: { site_spec_id: siteSpec.id, action: "unpublish" },
-      });
+      const { data, error } = await invokeEdgeFunctionBypass<{
+        success?: boolean;
+        error?: string;
+      }>("publish", { site_spec_id: siteSpec.id, action: "unpublish" });
 
       if (error) {
-        const message =
-          typeof error === "object" && error !== null && "message" in error
-            ? (error as { message: string }).message
-            : "Unpublish failed. Please try again.";
-        setPublishError(message);
-        setPublishing(false);
+        setPublishError(error);
         return;
       }
 
-      const response = data as { success?: boolean; error?: string } | undefined;
-      if (response?.error) {
-        setPublishError(response.error);
+      if (data?.error) {
+        setPublishError(data.error);
       } else {
         options?.onComplete?.();
       }

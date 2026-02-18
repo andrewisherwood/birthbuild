@@ -40,7 +40,7 @@ export function generateAboutPage(
   const headshotPhoto = photos.find((p) => p.purpose === "headshot");
   const photoHtml = headshotPhoto
     ? `<div>
-          <img src="${escapeHtml(headshotPhoto.publicUrl)}" alt="${escapeHtml(headshotPhoto.altText)}" class="about-photo" />
+          <img src="${escapeHtml(headshotPhoto.publicUrl)}" alt="${escapeHtml(headshotPhoto.altText)}" class="about-photo" loading="lazy" />
         </div>`
     : "";
 

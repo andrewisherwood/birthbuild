@@ -1,6 +1,7 @@
 import { Link, useSearchParams } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { useSiteSpec } from "@/hooks/useSiteSpec";
+import { usePhotoUpload } from "@/hooks/usePhotoUpload";
 import { useDebouncedSave } from "@/hooks/useDebouncedSave";
 import { DashboardShell } from "@/components/dashboard/DashboardShell";
 import { BusinessDetailsTab } from "@/components/dashboard/BusinessDetailsTab";
@@ -10,6 +11,7 @@ import { PhotosTab } from "@/components/dashboard/PhotosTab";
 import { ContactTab } from "@/components/dashboard/ContactTab";
 import { SeoTab } from "@/components/dashboard/SeoTab";
 import { PreviewTab } from "@/components/dashboard/PreviewTab";
+import { SiteEditorTab } from "@/components/dashboard/SiteEditorTab";
 import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
 import type { TabKey } from "@/components/dashboard/TabNav";
 
@@ -18,9 +20,10 @@ export default function DashboardPage() {
   const [searchParams] = useSearchParams();
   const siteId = searchParams.get("site_id") ?? undefined;
   const { siteSpec, loading: specLoading, error, isStale, patchLocal, updateSiteSpec } = useSiteSpec(siteId);
+  const { photos } = usePhotoUpload(siteSpec?.id ?? null);
   const { debouncedUpdate } = useDebouncedSave({ updateSiteSpec, patchLocal });
 
-  const isInstructor = profile?.role === "instructor";
+  const isInstructor = profile?.role === "instructor" || profile?.role === "admin";
 
   if (authLoading || specLoading) {
     return (
@@ -79,6 +82,8 @@ export default function DashboardPage() {
         return <SeoTab siteSpec={spec} onFieldChange={debouncedUpdate} />;
       case "preview":
         return <PreviewTab siteSpec={spec} onFieldChange={debouncedUpdate} isStale={isStale} />;
+      case "editor":
+        return <SiteEditorTab siteSpec={spec} />;
     }
   }
 
@@ -88,6 +93,7 @@ export default function DashboardPage() {
       loading={false}
       error={error}
       backLink={isInstructor ? { label: "Back to Admin", to: "/admin/sites" } : undefined}
+      photoCount={photos.length}
     >
       {renderTabContent}
     </DashboardShell>

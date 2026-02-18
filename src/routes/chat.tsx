@@ -62,7 +62,7 @@ export default function ChatPage() {
     initChat();
   }, [siteSpec, initChat]);
 
-  const isInstructor = profile?.role === "instructor";
+  const isInstructor = profile?.role === "instructor" || profile?.role === "admin";
 
   // Full-page loading while auth or spec is loading
   if (authLoading || specLoading) {

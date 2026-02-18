@@ -1,10 +1,12 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { useBuild } from "@/hooks/useBuild";
 import { usePublish } from "@/hooks/usePublish";
+import { GenerationProgressIndicator } from "@/components/dashboard/GenerationProgress";
+import { ToggleSwitch } from "@/components/dashboard/ToggleSwitch";
 import type { SiteSpec } from "@/types/site-spec";
 
 // ---------------------------------------------------------------------------
@@ -152,7 +154,15 @@ const DEVICE_LABELS: Record<DeviceSize, string> = {
 
 export function PreviewTab({ siteSpec, onFieldChange, isStale = false }: PreviewTabProps) {
   const summary = buildSummary(siteSpec);
-  const { building, buildError, triggerBuild, lastBuildStatus, validationWarnings } = useBuild(siteSpec);
+  const {
+    building,
+    buildError,
+    triggerBuild,
+    triggerLlmBuild,
+    generationProgress,
+    lastBuildStatus,
+    validationWarnings,
+  } = useBuild(siteSpec);
   const { publishing, publishError, publish, unpublish } = usePublish(siteSpec);
   const [deviceSize, setDeviceSize] = useState<DeviceSize>("desktop");
 
@@ -164,11 +174,22 @@ export function PreviewTab({ siteSpec, onFieldChange, isStale = false }: Preview
   const isLive = currentStatus === "live";
   const isPreview = currentStatus === "preview";
 
+  const useLlm = siteSpec.use_llm_generation;
+
   // Subdomain: editable for draft/preview, locked when live
   const subdomainLocked = isLive;
   const subdomainValue =
     siteSpec.subdomain_slug ??
     (siteSpec.doula_name ? slugifySubdomain(siteSpec.doula_name) : "");
+
+  // Auto-persist computed subdomain so the DB stays in sync with the UI
+  const autoPersistedRef = useRef(false);
+  useEffect(() => {
+    if (!siteSpec.subdomain_slug && subdomainValue && !autoPersistedRef.current) {
+      autoPersistedRef.current = true;
+      onFieldChange({ subdomain_slug: subdomainValue });
+    }
+  }, [siteSpec.subdomain_slug, subdomainValue, onFieldChange]);
 
   const handleSubdomainChange = useCallback(
     (value: string) => {
@@ -178,15 +199,50 @@ export function PreviewTab({ siteSpec, onFieldChange, isStale = false }: Preview
     [onFieldChange],
   );
 
-  const handleBuild = useCallback(async () => {
-    await triggerBuild();
-  }, [triggerBuild]);
+  const handleBuild = useCallback(() => {
+    const promise = useLlm ? triggerLlmBuild() : triggerBuild();
+    promise.catch((err: unknown) => {
+      console.error("[PreviewTab] Unhandled build error:", err);
+    });
+  }, [useLlm, triggerLlmBuild, triggerBuild]);
+
+  const handleLlmToggle = useCallback(
+    (enabled: boolean) => {
+      onFieldChange({ use_llm_generation: enabled });
+    },
+    [onFieldChange],
+  );
 
   // Use preview_url for iframe (always available after first build)
   const iframeUrl = previewUrl ?? deployUrl;
 
   return (
     <div className="space-y-6">
+      {/* AI Generation Toggle */}
+      <Card title="Build Mode">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-sm font-medium text-gray-900">
+              Use AI-generated pages
+            </p>
+            <p className="mt-0.5 text-xs text-gray-500">
+              AI generates unique, creative designs for your site. Template mode uses a standard layout.
+            </p>
+          </div>
+          <ToggleSwitch
+            checked={useLlm}
+            onChange={handleLlmToggle}
+            label="Use AI-generated pages"
+          />
+        </div>
+        {useLlm && (
+          <p className="mt-3 rounded-md border border-blue-200 bg-blue-50 p-2 text-xs text-blue-700">
+            AI generation takes 1-2 minutes and uses your instructor&rsquo;s API credits.
+            Each build creates a unique design.
+          </p>
+        )}
+      </Card>
+
       {/* Build Status Card */}
       <Card title="Build Status">
         <div className="flex items-center gap-3">
@@ -230,8 +286,13 @@ export function PreviewTab({ siteSpec, onFieldChange, isStale = false }: Preview
           </div>
         )}
 
-        {/* Building animation */}
-        {building && (
+        {/* LLM generation progress (replaces simple building animation) */}
+        {useLlm && generationProgress && (
+          <GenerationProgressIndicator progress={generationProgress} />
+        )}
+
+        {/* Template building animation */}
+        {building && !useLlm && (
           <div className="mt-4" aria-live="polite">
             <p className="mb-2 text-sm font-medium text-yellow-800">
               Building your site...
@@ -332,7 +393,7 @@ export function PreviewTab({ siteSpec, onFieldChange, isStale = false }: Preview
               loading={building}
               disabled={!canBuild}
             >
-              Build My Site
+              {useLlm ? "Generate My Site" : "Build My Site"}
             </Button>
           )}
           {(isPreview || isLive) && (
@@ -342,7 +403,7 @@ export function PreviewTab({ siteSpec, onFieldChange, isStale = false }: Preview
               disabled={!canBuild}
               variant="secondary"
             >
-              Rebuild Site
+              {useLlm ? "Regenerate Site" : "Rebuild Site"}
             </Button>
           )}
           {isPreview && (

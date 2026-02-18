@@ -1,9 +1,9 @@
 {
-  "state": "complete",
-  "phase": 6,
-  "branch": "main",
-  "pr_number": "",
-  "detail": "Pushed branch main",
+  "state": "pr-review-pending",
+  "phase": 7,
+  "branch": "feature/llm-site-generation",
+  "pr_number": "9",
+  "detail": "Pushed branch feature/llm-site-generation",
   "errors": [],
-  "last_updated": "2026-02-16T16:17:45Z"
+  "last_updated": "2026-02-18T11:39:58Z"
 }

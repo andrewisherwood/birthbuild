@@ -59,9 +59,15 @@ const ALLOWED_ORIGINS = [
   "https://www.birthbuild.com",
 ];
 
+function isAllowedOrigin(origin: string): boolean {
+  if (ALLOWED_ORIGINS.includes(origin)) return true;
+  if (/^https:\/\/[\w-]+--birthbuild\.netlify\.app$/.test(origin)) return true;
+  return false;
+}
+
 function corsHeaders(origin: string | null): Record<string, string> {
   const allowedOrigin =
-    origin && ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0]!;
+    origin && isAllowedOrigin(origin) ? origin : ALLOWED_ORIGINS[0]!;
   return {
     "Access-Control-Allow-Origin": allowedOrigin,
     "Access-Control-Allow-Headers":
@@ -233,10 +239,10 @@ Deno.serve(async (req: Request): Promise<Response> => {
     );
   }
 
-  const netlifySiteId = siteSpec.netlify_site_id as string | null;
+  let netlifySiteId = siteSpec.netlify_site_id as string | null;
   const subdomainSlug = siteSpec.subdomain_slug as string | null;
 
-  if (!netlifySiteId || !subdomainSlug) {
+  if (!subdomainSlug) {
     return new Response(
       JSON.stringify({
         error: "This site has not been built yet. Please build first.",
@@ -252,6 +258,38 @@ Deno.serve(async (req: Request): Promise<Response> => {
     Authorization: `Bearer ${netlifyApiToken}`,
     "Content-Type": "application/json",
   };
+
+  // If netlify_site_id is missing (e.g. the build's DB update failed), look
+  // it up by the well-known site name and persist it for future calls.
+  if (!netlifySiteId) {
+    const siteName = `birthbuild-${subdomainSlug}`;
+    const lookupRes = await fetch(
+      `https://api.netlify.com/api/v1/sites/${siteName}.netlify.app`,
+      { headers: { Authorization: `Bearer ${netlifyApiToken}` } },
+    );
+
+    if (!lookupRes.ok) {
+      return new Response(
+        JSON.stringify({
+          error: "This site has not been built yet. Please build first.",
+        }),
+        {
+          status: 400,
+          headers: { ...cors, "Content-Type": "application/json" },
+        },
+      );
+    }
+
+    const existingSite = (await lookupRes.json()) as { id: string };
+    netlifySiteId = existingSite.id;
+    console.log(`[publish] Recovered netlify_site_id: ${netlifySiteId}`);
+
+    // Persist the recovered ID so future calls don't need the lookup.
+    await serviceClient
+      .from("site_specs")
+      .update({ netlify_site_id: netlifySiteId })
+      .eq("id", siteSpec.id);
+  }
 
   // -----------------------------------------------------------------------
   // 5. Publish or Unpublish
@@ -279,6 +317,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
           headers: netlifyHeaders,
           body: JSON.stringify({
             custom_domain: `${subdomainSlug}.birthbuild.com`,
+            force_ssl: true,
           }),
         },
       );

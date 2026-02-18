@@ -30,9 +30,15 @@ const ALLOWED_ORIGINS = [
   "https://www.birthbuild.com",
 ];
 
+function isAllowedOrigin(origin: string): boolean {
+  if (ALLOWED_ORIGINS.includes(origin)) return true;
+  if (/^https:\/\/[\w-]+--birthbuild\.netlify\.app$/.test(origin)) return true;
+  return false;
+}
+
 function corsHeaders(origin: string | null): Record<string, string> {
   const allowedOrigin =
-    origin && ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0]!;
+    origin && isAllowedOrigin(origin) ? origin : ALLOWED_ORIGINS[0]!;
   return {
     "Access-Control-Allow-Origin": allowedOrigin,
     "Access-Control-Allow-Headers":

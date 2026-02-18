@@ -41,7 +41,7 @@ Guide the user through building their website in 7 steps, completing each step b
 1. **Welcome** — Introduce yourself and explain the process. Ask if they're ready to begin.
 2. **Basics** — Collect business name, the birth worker's name, service area, and services offered. Offer to help write service descriptions.
 3. **Style** — Ask about design preferences: style (modern, classic, or minimal), colour palette (sage & sand, blush & neutral, deep earth, ocean calm, or custom), and typography. Present choices clearly so the user can pick. Include markers like [CHOICES: Modern & Clean | Classic & Warm | Minimal & Calm] to help the UI render quick-reply buttons.
-4. **Content** — Collect or generate a bio, tagline, and philosophy statement. Offer to write drafts based on what you know about the user so far. If the user accepts a draft, save it immediately using the appropriate tool.
+4. **Content** — Collect or generate a bio, tagline, and philosophy statement. Offer to write drafts based on what you know about the user so far. When you write a draft, call update_content immediately in the same response to save it. Tell the user they can tweak it in the dashboard.
 5. **Photos** — Call trigger_photo_upload to show the upload panel inline so the user can upload their headshot, hero image, and gallery photos. After the user indicates they are done uploading, acknowledge their photos and move on.
 6. **Contact** — Collect email, phone (optional), booking URL (optional), social media links, Doula UK membership status, and training provider.
 7. **Review** — Summarise everything collected so far. Ask if anything needs changing. When the user confirms they're happy, mark the review step complete.
@@ -53,12 +53,13 @@ Guide the user through building their website in 7 steps, completing each step b
 - Never suggest medical claims or language that could be construed as medical advice.
 - Follow the user's lead on inclusive language (e.g., "birthing person" vs "mother").
 - If the user wants to skip a step, respect that and move on, but still call mark_step_complete.
-- When generating content (bio, tagline, etc.), present it for approval before saving. Say something like "Here's a draft — shall I save this, or would you like me to adjust it?"
+- IMPORTANT: When you generate content (bio, tagline, philosophy), you MUST call update_content in the SAME response to save the generated text immediately. Present the draft in your text response and let the user know they can edit it in the dashboard if they'd like changes. Do not wait for a separate approval step — save drafts immediately so nothing is lost.
 - For FAQ generation, create 4-6 common questions relevant to the user's services.
 - At the review step, display a clear summary of all collected data grouped by category.
 - Keep the conversation flowing naturally — don't be overly formal or robotic.
 - Do not repeat information the user has already provided.
-- If the user asks something off-topic, gently redirect them back to the website building process.`;
+- If the user asks something off-topic, gently redirect them back to the website building process.
+- When saving services with update_business_info, always include the "type" field for each service. Valid types include: "birth-support", "postnatal", "antenatal", "consultation", "package", "workshop", or other relevant categories.`;
 
 // ---------------------------------------------------------------------------
 // SEC-010: Tool definitions hardcoded in Edge Function (not accepted from client)
@@ -216,7 +217,7 @@ const CHAT_TOOLS: Array<Record<string, unknown>> = [
   {
     name: "generate_content",
     description:
-      "Generate AI-written content for a specific field based on context from the conversation. Present the generated content for the user's approval before saving it.",
+      "Signal that you are generating AI-written content for a specific field. Always call update_content in the same response to save the generated text immediately.",
     input_schema: {
       type: "object",
       properties: {
@@ -326,9 +327,15 @@ const ALLOWED_ORIGINS = [
   "https://www.birthbuild.com",
 ];
 
+function isAllowedOrigin(origin: string): boolean {
+  if (ALLOWED_ORIGINS.includes(origin)) return true;
+  if (/^https:\/\/[\w-]+--birthbuild\.netlify\.app$/.test(origin)) return true;
+  return false;
+}
+
 function corsHeaders(origin: string | null): Record<string, string> {
   const allowedOrigin =
-    origin && ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0]!;
+    origin && isAllowedOrigin(origin) ? origin : ALLOWED_ORIGINS[0]!;
   return {
     "Access-Control-Allow-Origin": allowedOrigin,
     "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",

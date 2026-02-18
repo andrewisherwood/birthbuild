@@ -5,6 +5,7 @@
 BirthBuild is an AI-powered static website builder for birth workers (doulas, midwives, antenatal educators). Non-technical users build professional websites through a guided chatbot conversation or a form-based dashboard. An instructor creates workshop sessions, invites students via magic link, and monitors progress. The chatbot gathers preferences and content, produces a structured site specification, and triggers a build pipeline that generates and deploys a static site to a provisioned subdomain on birthbuild.com.
 
 See `SCOPING.md` for full product specification including data model, feature breakdown, and build phases.
+See `scoping-rebuild.md` for the precise rebuild specification derived from the existing codebase.
 See `uk-doula-website-research.md` for design patterns, colour palettes, accessibility trees, and SEO requirements that inform generated site output.
 
 ## Tech Stack
@@ -79,6 +80,10 @@ birthbuild/
 │   │   │   ├── ContactTab.tsx
 │   │   │   ├── SeoTab.tsx
 │   │   │   ├── PreviewTab.tsx     # Build, preview URL, publish/unpublish controls
+│   │   │   ├── SiteEditorTab.tsx  # Deterministic editing (sections, colours, fonts, live preview)
+│   │   │   ├── SiteEditChat.tsx   # AI-powered section editing via chat
+│   │   │   ├── CheckpointHistory.tsx # Version history with rollback
+│   │   │   ├── GenerationProgress.tsx # LLM build progress bar
 │   │   │   ├── AskAiButton.tsx
 │   │   │   ├── CustomColourPicker.tsx
 │   │   │   ├── PaletteSelector.tsx
@@ -96,10 +101,13 @@ birthbuild/
 │   │       └── UsageMetrics.tsx
 │   ├── lib/
 │   │   ├── supabase.ts            # Supabase client init
+│   │   ├── auth-bypass.ts         # SDK bypass for Edge Function calls (avoids auth lock hangs)
 │   │   ├── claude.ts              # Claude API call helpers (via Edge Function)
 │   │   ├── chat-prompts.ts        # System prompts and step definitions for chat
 │   │   ├── chat-tools.ts          # Tool definitions and spec-update mapping
 │   │   ├── site-generator.ts      # Static site HTML/CSS generation
+│   │   ├── section-parser.ts      # Parse/reorder/remove HTML sections (bb-section markers)
+│   │   ├── css-editor.ts          # Extract/update CSS variables in checkpoint HTML
 │   │   ├── wordmark.ts            # SVG wordmark logo generation
 │   │   ├── invite.ts              # Invite link helpers
 │   │   └── palettes.ts            # Colour palette definitions
@@ -107,7 +115,8 @@ birthbuild/
 │   │   ├── useAuth.ts             # Auth state, sign in/out, profile
 │   │   ├── useSiteSpec.ts         # CRUD for site_specs (optional siteId for multi-site)
 │   │   ├── useChat.ts             # Chat state, message sending, step tracking
-│   │   ├── useBuild.ts            # Build status tracking via Supabase Realtime
+│   │   ├── useBuild.ts            # Build orchestration (template + LLM) + Realtime status
+│   │   ├── useCheckpoint.ts       # CRUD for site_checkpoints (versioned HTML snapshots)
 │   │   ├── usePublish.ts          # Publish/unpublish actions
 │   │   ├── usePhotoUpload.ts      # Photo upload/delete to Supabase Storage
 │   │   ├── useDebouncedSave.ts    # Debounced spec field saves (500ms)
@@ -124,10 +133,21 @@ birthbuild/
 │   ├── migrations/
 │   │   ├── 001_initial_schema.sql
 │   │   ├── 002_storage_policies.sql
-│   │   └── 003_preview_publish.sql # Adds "preview" status + preview_url column
+│   │   ├── 003_preview_publish.sql # Adds "preview" status + preview_url column
+│   │   ├── 004_design_config.sql   # Advanced design editor overrides
+│   │   ├── 005_admin_role.sql      # Admin role + instructor invite EF
+│   │   ├── 006_llm_generation.sql  # site_checkpoints table, retention trigger, RLS
+│   │   ├── 007_public_photos_bucket.sql # Public bucket for permanent image URLs
+│   │   └── 008_rate_limit_table.sql    # DB-backed rate limiting
 │   ├── functions/
+│   │   ├── _shared/
+│   │   │   ├── edge-helpers.ts    # CORS, auth, DB-backed rate limiting, body size validation
+│   │   │   └── sanitise-html.ts   # HTML + CSS sanitisation for LLM output
 │   │   ├── chat/index.ts          # Claude API proxy + tool calling
 │   │   ├── build/index.ts         # Site generation + Netlify deploy (preview first)
+│   │   ├── generate-design-system/index.ts  # LLM: shared CSS, nav, footer generation
+│   │   ├── generate-page/index.ts           # LLM: per-page HTML generation
+│   │   ├── edit-section/index.ts            # LLM: AI-powered section editing
 │   │   ├── publish/index.ts       # Publish (add custom domain) / unpublish
 │   │   ├── delete-site/index.ts   # Delete site (Netlify + storage + DB cleanup)
 │   │   └── invite/index.ts        # Generate magic link invites
@@ -161,6 +181,15 @@ birthbuild/
 - **Preview before publish** — builds deploy to Netlify without a custom domain (preview). A separate publish action adds the custom domain to go live. Status flow: `draft → building → preview → live` (with `error` as a retry state). Rebuilds while live preserve the live status.
 - **Instructor multi-site** — instructors can create multiple sites via `/admin/sites`. The `?site_id=` query param threads through `/chat` and `/dashboard` to scope to a specific spec. Student flow (no `site_id`) fetches their single spec.
 - **Chat tool calling** — Claude uses function calling (`tool_use`) to write structured data to the site spec (e.g. `set_business_info`, `set_style`). The `trigger_photo_upload` tool shows an inline upload panel. `mark_step_complete` transitions the chat step state.
+- **Two build paths** — Template build (deterministic, client-side HTML generation) and LLM build (AI-generated pages via Edge Functions). The LLM path: generate-design-system → generate-page (parallel, per page) → save checkpoint → deploy to Netlify.
+- **Checkpoint system** — Versioned HTML snapshots in `site_checkpoints` table. Each checkpoint stores full HTML pages + cached design system. Retention trigger prunes to last 10 per site. Unique constraint on `(site_spec_id, version)` with retry logic for concurrent writes.
+- **Section markers** — `<!-- bb-section:name -->...<!-- /bb-section:name -->` HTML comments enable deterministic editing (reorder, remove, replace) without re-running the LLM.
+- **SDK auth bypass** — `invokeEdgeFunctionBypass()` in `auth-bypass.ts` uses raw `fetch()` to call Edge Functions, bypassing the Supabase SDK's auth lock which can hang under React 18 Strict Mode double-mounts. All Edge Function calls from hooks use this.
+- **10-second loading backstop** — All data-fetching hooks (`useSiteSpec`, `usePhotoUpload`, `useCheckpoint`) cap their loading state at 10 seconds to prevent permanent spinners from SDK hangs.
+- **Public photos bucket** — Photos bucket is public for permanent image URLs. Supabase Image Transforms (Pro plan) resize to 1200px wide, quality 80, auto WebP. Upload/delete policies remain scoped to authenticated users.
+- **DB-backed rate limiting** — `check_rate_limit` RPC atomically upserts counters with sliding window expiry. Replaces in-memory Maps that reset on cold starts. Fails open if DB call errors.
+- **Content Security Policy** — All generated site pages include CSP meta tags: `default-src 'none'`, allows inline styles + Google Fonts, Supabase storage images, form submissions. Blocks scripts and iframes.
+- **HTML/CSS sanitisation** — All LLM-generated HTML is sanitised via regex-based stripping of `<script>`, event handlers, `javascript:` URLs, `<base>` tags, CSS `@import`/`expression()`/`url()` injection.
 
 ### Component Conventions
 
@@ -197,6 +226,9 @@ npx supabase gen types typescript --local > src/types/database.ts
 # Deploy Edge Functions
 npx supabase functions deploy chat
 npx supabase functions deploy build
+npx supabase functions deploy generate-design-system
+npx supabase functions deploy generate-page
+npx supabase functions deploy edit-section
 npx supabase functions deploy publish
 npx supabase functions deploy delete-site
 npx supabase functions deploy invite
@@ -231,6 +263,12 @@ npx prettier --write src/
 - RLS policies on every table — no public access without auth
 - Magic link tokens expire after 1 hour
 - Instructor Claude API keys encrypted at rest in Supabase
+- LLM output sanitised: HTML stripped of scripts/event handlers/dangerous URLs, CSS stripped of breakouts/imports/expressions
+- CSP meta tags on all generated pages block inline scripts and foreign resources
+- Edge Function body size validation (1MB max) prevents memory exhaustion
+- DB-backed rate limiting survives cold starts (in-memory Maps do not)
+- Editor iframe sandboxed with empty `sandbox=""` (no `allow-same-origin`)
+- See `SECURITY.md` for full audit trail and `SECURITY_REVIEW.md` for detailed findings
 
 ### SEO (generated sites)
 - Semantic HTML5 with proper landmark roles

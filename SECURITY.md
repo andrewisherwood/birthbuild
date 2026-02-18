@@ -2,7 +2,7 @@
 
 **Project:** BirthBuild
 **Initialized:** 2026-02-15T17:14:44Z
-**Last Updated:** 2026-02-15T22:00:00Z
+**Last Updated:** 2026-02-18T12:00:00Z
 
 ## Overview
 
@@ -21,6 +21,31 @@ _(No findings yet)_
 ## Manual Reviews
 
 _(Entries added by Security Agent via /security-audit skill)_
+
+### LLM Site Generation Feature (2026-02-18)
+- **PR:** #9
+- **Branch:** feature/llm-site-generation
+- **Result:** ISSUES FOUND (14 findings: 0 Critical, 1 High, 4 Medium, 9 Low)
+- **Scope:** 3 new Edge Functions (generate-design-system, generate-page, edit-section), shared edge helpers, HTML sanitiser, auth bypass module, checkpoint system, site editor UI
+- **New API endpoints:** generate-design-system, generate-page, edit-section
+- **New database tables:** site_checkpoints (with RLS)
+- **Key findings:**
+  - SEC-035 (High): HTML sanitiser regex bypass vectors (unclosed script tags, base tag, javascript: encoding)
+  - SEC-036 (Medium): CSS output not sanitised (data exfiltration risk)
+  - SEC-037 (Medium): Prompt injection surface in edit-section
+  - SEC-038 (Medium): Iframe sandbox too permissive (srcdoc + allow-same-origin)
+  - SEC-039 (Medium): Auth bypass module lacks token validation
+  - SEC-040-048 (Low): Rate limit resets, missing body size limits, checkpoint race conditions, informational items
+- **Automated findings triaged:** All CRITICAL/HIGH automated scanner findings confirmed as FALSE POSITIVES (server-side env access and RegExp.exec)
+- **Remediation (commit `82cc0e2`):** ALL critical, high, and medium findings resolved:
+  - SEC-035: Fixed — added unclosed script detection, `<base>` tag blocking, entity-encoded javascript: matching
+  - SEC-036: Fixed — new `sanitiseCss()` strips `</style>` breakouts, `@import`, `expression()`, dangerous `url()`
+  - SEC-037: Mitigated — hardcoded system prompts, output sanitisation applied
+  - SEC-038: Fixed — iframe `sandbox=""` (removed `allow-same-origin`)
+  - SEC-039: Fixed — try/catch on fetch/JSON, session merge on refresh
+  - SEC-040-048: Fixed — DB-backed rate limiting, body size validation, checkpoint version retry, CSP headers, public photo URLs
+- **Verdict:** ALL review items resolved. APPROVE for merge.
+- **Full review:** See SECURITY_REVIEW.md
 
 ### Phase 6: Polish & Integration Testing (2026-02-15)
 - **PR:** #6
@@ -145,4 +170,49 @@ _(Entries added by Security Agent via /security-audit skill)_
 **Commit:** `21bce34` | **Files scanned:** 11 | **Findings:** 2
 
 - **CRITICAL** `SUPABASE_SERVICE_ROLE_KEY` — supabase/functions/design-chat/index.ts:230
+
+
+### Scan — d0beae7 (2026-02-17T07:10:33Z)
+
+**Commit:** `d0beae7` | **Files scanned:** 19 | **Findings:** 4
+
+- **CRITICAL** `SUPABASE_SERVICE_ROLE_KEY` — supabase/functions/_shared/edge-helpers.ts:94
+- **CRITICAL** `SUPABASE_SERVICE_ROLE_KEY` — supabase/functions/_shared/edge-helpers.ts:156
+- **HIGH** `exec(` — src/lib/section-parser.ts:49
+
+
+### Scan — 4001961 (2026-02-17T17:08:21Z)
+
+**Commit:** `4001961` | **Files scanned:** 17 | **Findings:** 10
+
+- **CRITICAL** `SUPABASE_SERVICE_ROLE_KEY` — supabase/functions/_shared/edge-helpers.ts:100
+- **CRITICAL** `SUPABASE_SERVICE_ROLE_KEY` — supabase/functions/_shared/edge-helpers.ts:162
+- **CRITICAL** `SUPABASE_SERVICE_ROLE_KEY` — supabase/functions/build/index.ts:368
+- **CRITICAL** `SUPABASE_SERVICE_ROLE_KEY` — supabase/functions/chat/index.ts:380
+- **CRITICAL** `SUPABASE_SERVICE_ROLE_KEY` — supabase/functions/delete-site/index.ts:86
+- **CRITICAL** `SUPABASE_SERVICE_ROLE_KEY` — supabase/functions/design-chat/index.ts:236
+- **CRITICAL** `SUPABASE_SERVICE_ROLE_KEY` — supabase/functions/invite-instructor/index.ts:91
+- **CRITICAL** `SUPABASE_SERVICE_ROLE_KEY` — supabase/functions/invite/index.ts:139
+- **CRITICAL** `SUPABASE_SERVICE_ROLE_KEY` — supabase/functions/publish/index.ts:115
+
+
+### Scan — 82cc0e2 (2026-02-18T11:38:40Z)
+
+**Commit:** `82cc0e2` | **Files scanned:** 18 | **Findings:** 16
+
+- **CRITICAL** `SUPABASE_SERVICE_ROLE_KEY` — supabase/functions/_shared/edge-helpers.ts:133
+- **CRITICAL** `SUPABASE_SERVICE_ROLE_KEY` — supabase/functions/_shared/edge-helpers.ts:195
+- **HIGH** `exec(` — src/lib/section-parser.ts:36
+- **LOW** `console.log` — src/hooks/useBuild.ts:337
+- **LOW** `console.log` — src/hooks/useBuild.ts:354
+- **LOW** `console.log` — src/hooks/useBuild.ts:361
+- **LOW** `console.log` — src/hooks/useBuild.ts:373
+- **LOW** `console.log` — src/hooks/useBuild.ts:378
+- **LOW** `console.log` — src/hooks/useBuild.ts:409
+- **LOW** `console.log` — src/hooks/useBuild.ts:430
+- **LOW** `console.log` — src/hooks/useBuild.ts:434
+- **LOW** `console.log` — src/hooks/useBuild.ts:466
+- **LOW** `console.log` — src/hooks/useBuild.ts:520
+- **LOW** `console.log` — src/hooks/useBuild.ts:582
+- **LOW** `console.log` — src/hooks/useBuild.ts:617
 

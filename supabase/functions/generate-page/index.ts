@@ -96,8 +96,15 @@ function buildSystemPrompt(page: string, spec: any, designSystem: DesignSystemIn
   const bookingUrl = spec.booking_url ?? "";
   const doulaUk = spec.doula_uk ?? false;
   const trainingProvider = spec.training_provider ?? "";
+  const trainingYear = spec.training_year ?? "";
   const primaryKeyword = spec.primary_keyword ?? "";
   const subdomain = spec.subdomain_slug ?? "example";
+  const primaryLocation = spec.primary_location ?? "";
+  const bioPreviousCareer = spec.bio_previous_career ?? "";
+  const bioOriginStory = spec.bio_origin_story ?? "";
+  const additionalTraining = spec.additional_training ?? [];
+  const clientPerception = spec.client_perception ?? "";
+  const signatureStory = spec.signature_story ?? "";
 
   const photosDesc = photos.length > 0
     ? photos.map((p) => `- ${p.purpose}: ${p.publicUrl} (alt: "${p.altText}")`).join("\n")
@@ -128,21 +135,31 @@ function buildSystemPrompt(page: string, spec: any, designSystem: DesignSystemIn
 - Schema.org LocalBusiness JSON-LD in a <script type="application/ld+json"> block with:
   - @type: LocalBusiness
   - name: "${businessName}"
-  - areaServed: "${serviceArea}"
+  - areaServed: "${primaryLocation ? primaryLocation + ", " : ""}${serviceArea}"
   - url: "https://${subdomain}.birthbuild.com"
   ${email ? `- email: "${email}"` : ""}
-  ${phone ? `- telephone: "${phone}"` : ""}`;
+  ${phone ? `- telephone: "${phone}"` : ""}
+  ${trainingProvider ? `- hasCredential: "${trainingProvider}${trainingYear ? ` (${trainingYear})` : ""}"` : ""}`;
       break;
 
-    case "about":
+    case "about": {
+      const aboutExtras: string[] = [];
+      if (bioPreviousCareer) aboutExtras.push(`- Reference their previous career: ${bioPreviousCareer}`);
+      if (bioOriginStory) aboutExtras.push(`- Weave in their origin story: ${bioOriginStory}`);
+      if (additionalTraining.length > 0) aboutExtras.push(`- Mention additional qualifications: ${additionalTraining.join(", ")}`);
+      if (clientPerception) aboutExtras.push(`- Include what clients say about them: ${clientPerception}`);
+      if (signatureStory) aboutExtras.push(`- If space allows, reference this personal story: ${signatureStory}`);
+      if (trainingYear) aboutExtras.push(`- Training year: ${trainingYear}`);
+      const aboutExtrasStr = aboutExtras.length > 0 ? "\n" + aboutExtras.join("\n") : "";
       pageSpecific = `## About Page Requirements
 - Hero section with the page title
 - Bio section with the birth worker's biography
 - Philosophy section with their approach statement
-- Qualifications section${doulaUk ? " (mention Doula UK membership)" : ""}${trainingProvider ? ` (trained with: ${trainingProvider})` : ""}
+- Qualifications section${doulaUk ? " (mention Doula UK membership)" : ""}${trainingProvider ? ` (trained with: ${trainingProvider})` : ""}${aboutExtrasStr}
 - CTA section encouraging visitors to get in touch
 - If a headshot photo is available, display it prominently`;
       break;
+    }
 
     case "services":
       pageSpecific = `## Services Page Requirements

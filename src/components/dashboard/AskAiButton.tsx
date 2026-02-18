@@ -21,6 +21,32 @@ function buildPrompt(fieldName: string, siteSpec: SiteSpec): string {
     .filter(Boolean)
     .join(". ");
 
+  // Enhanced bio prompt using all depth fields
+  if (fieldName === "bio") {
+    const depthContext = [
+      siteSpec.bio_previous_career ? `Background: ${siteSpec.bio_previous_career}` : null,
+      siteSpec.bio_origin_story ? `Origin story: ${siteSpec.bio_origin_story}` : null,
+      siteSpec.training_provider ? `Trained with: ${siteSpec.training_provider}` : null,
+      siteSpec.training_year ? `Qualified: ${siteSpec.training_year}` : null,
+      siteSpec.additional_training && siteSpec.additional_training.length > 0
+        ? `Additional training: ${siteSpec.additional_training.join(", ")}`
+        : null,
+      siteSpec.philosophy ? `Philosophy: ${siteSpec.philosophy}` : null,
+      siteSpec.client_perception ? `What clients say: ${siteSpec.client_perception}` : null,
+      siteSpec.signature_story ? `A story that matters to them: ${siteSpec.signature_story}` : null,
+    ]
+      .filter(Boolean)
+      .join("\n");
+
+    return `You are a copywriter for a UK doula/birth worker website. Write a compelling bio for this professional.
+
+${context}
+
+${depthContext}
+
+Write in first person. Warm, professional, British English. 2-3 paragraphs. Lead with the origin story if available, weave in the philosophy, close with what clients can expect. Return only the text, no headings or formatting.`;
+  }
+
   return `You are a copywriter for a UK doula/birth worker website. Write a compelling ${fieldName} for this professional. Context: ${context}. Use British English. Keep it warm, professional, and authentic. Return only the text, no headings or formatting.`;
 }
 

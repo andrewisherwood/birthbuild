@@ -67,7 +67,7 @@ export function DashboardShell({
             <h1 className="truncate text-lg font-semibold text-gray-900">
               {siteSpec.business_name ?? "Untitled Site"}
             </h1>
-            <ProgressIndicator siteSpec={siteSpec} className="mt-2 max-w-xs" />
+            <ProgressIndicator siteSpec={siteSpec} className="mt-2 max-w-xs" showSuggestions />
           </div>
           <div className="flex shrink-0 gap-2">
             {backLink && (

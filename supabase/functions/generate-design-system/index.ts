@@ -76,6 +76,7 @@ interface ResolvedSpec {
   spacingDensity: string;
   borderRadius: string;
   typographyScale: string;
+  brandFeeling: string;
   year: number;
 }
 
@@ -135,6 +136,7 @@ function resolveSpec(spec: any): ResolvedSpec {
     spacingDensity,
     borderRadius,
     typographyScale,
+    brandFeeling: spec.brand_feeling ?? "",
     year: new Date().getFullYear(),
   };
 }
@@ -205,7 +207,7 @@ function buildSystemPrompt(resolved: ResolvedSpec): string {
 - Doula/birth worker name: "${resolved.doulaName}"
 - Tagline: "${resolved.tagline}"
 - Service area: "${resolved.serviceArea}"
-- Style preference: ${resolved.style}
+- Style preference: ${resolved.style}${resolved.brandFeeling ? `\n- Brand feeling: "${resolved.brandFeeling}" — use this as creative direction for the overall aesthetic. Let it influence spacing, shadow depth, gradient warmth, and decorative elements.` : ""}
 
 ## Colour Palette (use these exact hex values as CSS custom properties)
 - Background: ${resolved.colours.background}

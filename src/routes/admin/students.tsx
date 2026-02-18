@@ -34,6 +34,27 @@ function ProgressBar({ percent }: ProgressBarProps) {
   );
 }
 
+const DENSITY_LEVEL_COLOURS: Record<string, string> = {
+  low: "text-red-600 bg-red-50",
+  medium: "text-amber-600 bg-amber-50",
+  high: "text-green-600 bg-green-50",
+  excellent: "text-green-800 bg-green-100",
+};
+
+interface DensityBadgeProps {
+  score: number;
+  level: string;
+}
+
+function DensityBadge({ score, level }: DensityBadgeProps) {
+  const colours = DENSITY_LEVEL_COLOURS[level] ?? "text-gray-600 bg-gray-50";
+  return (
+    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${colours}`}>
+      {score}/25
+    </span>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Email validation
 // ---------------------------------------------------------------------------
@@ -243,6 +264,12 @@ export default function AdminStudentsPage() {
                   </th>
                   <th
                     scope="col"
+                    className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500"
+                  >
+                    Density
+                  </th>
+                  <th
+                    scope="col"
                     className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500"
                   >
                     Actions
@@ -285,6 +312,16 @@ export default function AdminStudentsPage() {
                         <span className="text-sm text-gray-400">
                           Not started
                         </span>
+                      )}
+                    </td>
+                    <td className="whitespace-nowrap px-6 py-4">
+                      {student.site_spec ? (
+                        <DensityBadge
+                          score={student.site_spec.density_score}
+                          level={student.site_spec.density_level}
+                        />
+                      ) : (
+                        <span className="text-sm text-gray-400">—</span>
                       )}
                     </td>
                     <td className="whitespace-nowrap px-6 py-4 text-right">
@@ -367,8 +404,12 @@ export default function AdminStudentsPage() {
               </p>
 
               {student.site_spec && (
-                <div className="mt-3">
+                <div className="mt-3 flex items-center gap-3">
                   <ProgressBar percent={student.site_spec.completion_percent} />
+                  <DensityBadge
+                    score={student.site_spec.density_score}
+                    level={student.site_spec.density_level}
+                  />
                 </div>
               )}
 

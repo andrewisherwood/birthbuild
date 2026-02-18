@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/hooks/useAuth";
+import { calculateDensityScore } from "@/lib/density-score";
 import type { StudentOverview } from "@/types/database";
 import type { SiteSpec } from "@/types/site-spec";
 
@@ -89,12 +90,12 @@ export function useStudents(sessionId?: string): UseStudentsReturn {
         return;
       }
 
-      // Fetch site specs for these students
+      // Fetch site specs for these students (include density fields)
       const studentIds = profileRows.map((p) => p.id);
       const { data: specData } = await supabase
         .from("site_specs")
         .select(
-          "id, user_id, status, business_name, doula_name, deploy_url, preview_url, service_area, email, bio, tagline, services",
+          "id, user_id, status, business_name, doula_name, deploy_url, preview_url, service_area, primary_location, email, bio, tagline, services, philosophy, bio_previous_career, bio_origin_story, training_provider, training_year, additional_training, client_perception, signature_story, testimonials, brand_feeling, phone, booking_url, social_links, style, palette",
         )
         .in("user_id", studentIds);
 
@@ -108,24 +109,33 @@ export function useStudents(sessionId?: string): UseStudentsReturn {
 
       const results: StudentOverview[] = profileRows.map((p) => {
         const spec = specMap.get(p.id);
+        if (!spec) {
+          return {
+            id: p.id,
+            email: p.email,
+            display_name: p.display_name,
+            session_id: p.session_id,
+            site_spec: null,
+          };
+        }
+
+        const density = calculateDensityScore(spec as unknown as SiteSpec);
         return {
           id: p.id,
           email: p.email,
           display_name: p.display_name,
           session_id: p.session_id,
-          site_spec: spec
-            ? {
-                id: spec.id as string,
-                status: spec.status as StudentOverview["site_spec"] extends null
-                  ? never
-                  : NonNullable<StudentOverview["site_spec"]>["status"],
-                business_name: (spec.business_name as string | null) ?? null,
-                doula_name: (spec.doula_name as string | null) ?? null,
-                deploy_url: (spec.deploy_url as string | null) ?? null,
-                preview_url: (spec.preview_url as string | null) ?? null,
-                completion_percent: calculateCompletion(spec),
-              }
-            : null,
+          site_spec: {
+            id: spec.id as string,
+            status: spec.status as NonNullable<StudentOverview["site_spec"]>["status"],
+            business_name: (spec.business_name as string | null) ?? null,
+            doula_name: (spec.doula_name as string | null) ?? null,
+            deploy_url: (spec.deploy_url as string | null) ?? null,
+            preview_url: (spec.preview_url as string | null) ?? null,
+            completion_percent: calculateCompletion(spec),
+            density_score: density.totalScore,
+            density_level: density.level,
+          },
         };
       });
 

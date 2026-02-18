@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
 import { StyleSelector } from "@/components/dashboard/StyleSelector";
 import { PaletteSelector } from "@/components/dashboard/PaletteSelector";
 import { TypographySelector } from "@/components/dashboard/TypographySelector";
@@ -65,6 +66,24 @@ export function DesignTab({ siteSpec, onFieldChange, updateSiteSpec }: DesignTab
           value={siteSpec.typography ?? "modern"}
           onChange={handleTypographyChange}
         />
+
+        <div className="mt-6 space-y-4 border-t border-gray-200 pt-6">
+          <Input
+            label="Brand Feeling"
+            value={siteSpec.brand_feeling ?? ""}
+            onChange={(value) => onFieldChange({ brand_feeling: value })}
+            placeholder="e.g. calm, earthy, warm, professional, luxurious"
+            helperText="The feeling you want visitors to get when they land on your site"
+          />
+          <Input
+            label="Inspiration URL"
+            value={siteSpec.style_inspiration_url ?? ""}
+            onChange={(value) => onFieldChange({ style_inspiration_url: value })}
+            type="url"
+            placeholder="https://example.com"
+            helperText="A website whose look or vibe you admire (optional)"
+          />
+        </div>
 
         <div className="mt-6 border-t border-gray-200 pt-6">
           <Button

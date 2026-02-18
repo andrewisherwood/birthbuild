@@ -389,10 +389,10 @@ export function SiteEditorTab({ siteSpec }: SiteEditorTabProps) {
             <Button
               onClick={handleDeploy}
               loading={deploying}
-              disabled={deploying}
+              disabled={deploying || hasChanges}
               variant="secondary"
             >
-              Deploy Latest
+              {hasChanges ? "Save First" : "Deploy Latest"}
             </Button>
           </div>
 
@@ -421,7 +421,7 @@ export function SiteEditorTab({ siteSpec }: SiteEditorTabProps) {
               <iframe
                 ref={previewRef}
                 title="Site editor preview"
-                sandbox="allow-same-origin"
+                sandbox=""
                 className="h-[600px] w-full border-0 bg-white"
               />
             </div>

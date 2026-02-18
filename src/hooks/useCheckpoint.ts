@@ -6,13 +6,41 @@
  * used to generate them (cached for deterministic edits).
  */
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
+import { invokeEdgeFunctionBypass } from "@/lib/auth-bypass";
 import type {
   SiteCheckpoint,
   CheckpointPage,
   CheckpointDesignSystem,
 } from "@/types/site-spec";
+
+// ---------------------------------------------------------------------------
+// Supabase row → domain type mapper
+// ---------------------------------------------------------------------------
+
+/** Shape returned by Supabase for site_checkpoints rows. */
+interface CheckpointRow {
+  id: string;
+  site_spec_id: string;
+  version: number;
+  html_pages: { pages: CheckpointPage[] };
+  design_system: CheckpointDesignSystem | null;
+  label: string | null;
+  created_at: string;
+}
+
+function toCheckpoint(row: CheckpointRow): SiteCheckpoint {
+  return {
+    id: row.id,
+    site_spec_id: row.site_spec_id,
+    version: row.version,
+    html_pages: row.html_pages,
+    design_system: row.design_system,
+    label: row.label,
+    created_at: row.created_at,
+  };
+}
 
 // ---------------------------------------------------------------------------
 // Types
@@ -45,6 +73,13 @@ export function useCheckpoint(): UseCheckpointReturn {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Hard backstop: never let the spinner hang indefinitely (matches useSiteSpec/usePhotoUpload).
+  useEffect(() => {
+    if (!loading) return;
+    const id = setTimeout(() => setLoading(false), 10_000);
+    return () => clearTimeout(id);
+  }, [loading]);
+
   const latestCheckpoint = checkpoints.length > 0 ? checkpoints[0]! : null;
 
   const fetchCheckpoints = useCallback(async (siteSpecId: string) => {
@@ -64,7 +99,7 @@ export function useCheckpoint(): UseCheckpointReturn {
       return;
     }
 
-    setCheckpoints((data ?? []) as unknown as SiteCheckpoint[]);
+    setCheckpoints((data ?? []).map((row) => toCheckpoint(row as CheckpointRow)));
     setLoading(false);
   }, []);
 
@@ -77,42 +112,63 @@ export function useCheckpoint(): UseCheckpointReturn {
     ): Promise<SiteCheckpoint | null> => {
       setError(null);
 
-      // Determine next version number
-      const { data: maxRow } = await supabase
-        .from("site_checkpoints")
-        .select("version")
-        .eq("site_spec_id", siteSpecId)
-        .order("version", { ascending: false })
-        .limit(1)
-        .single();
+      // Retry loop: handles TOCTOU race on version numbers.
+      // The unique constraint (site_spec_id, version) rejects duplicates;
+      // on conflict we re-read the max version and retry (up to 3 attempts).
+      let checkpoint: SiteCheckpoint | null = null;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        const { data: maxRow } = await supabase
+          .from("site_checkpoints")
+          .select("version")
+          .eq("site_spec_id", siteSpecId)
+          .order("version", { ascending: false })
+          .limit(1)
+          .single();
 
-      const nextVersion = maxRow ? (maxRow.version as number) + 1 : 1;
+        const nextVersion = maxRow ? Number(maxRow.version) + 1 : 1;
 
-      const { data, error: insertError } = await supabase
-        .from("site_checkpoints")
-        .insert({
-          site_spec_id: siteSpecId,
-          version: nextVersion,
-          html_pages: { pages },
-          design_system: designSystem ?? null,
-          label: label ?? null,
-        })
-        .select()
-        .single();
+        const { data, error: insertError } = await supabase
+          .from("site_checkpoints")
+          .insert({
+            site_spec_id: siteSpecId,
+            version: nextVersion,
+            html_pages: { pages },
+            design_system: designSystem ?? null,
+            label: label ?? null,
+          })
+          .select()
+          .single();
 
-      if (insertError) {
-        console.error("[useCheckpoint] Insert error:", insertError.message);
+        if (!insertError && data) {
+          checkpoint = toCheckpoint(data as CheckpointRow);
+          break;
+        }
+
+        // If it's a unique violation (code 23505), retry with a fresh version
+        if (insertError?.code === "23505" && attempt < 2) {
+          console.warn(`[useCheckpoint] Version conflict (attempt ${attempt + 1}), retrying…`);
+          continue;
+        }
+
+        console.error("[useCheckpoint] Insert error:", insertError?.message);
         setError("Failed to save checkpoint.");
         return null;
       }
 
-      const checkpoint = data as unknown as SiteCheckpoint;
+      if (!checkpoint) {
+        setError("Failed to save checkpoint after retries.");
+        return null;
+      }
 
       // Update latest_checkpoint_id on the site spec
-      await supabase
+      const { error: updateError } = await supabase
         .from("site_specs")
         .update({ latest_checkpoint_id: checkpoint.id })
         .eq("id", siteSpecId);
+
+      if (updateError) {
+        console.error("[useCheckpoint] Failed to update latest_checkpoint_id:", updateError.message);
+      }
 
       // Prepend to local state
       setCheckpoints((prev) => [checkpoint, ...prev]);
@@ -138,7 +194,8 @@ export function useCheckpoint(): UseCheckpointReturn {
         return false;
       }
 
-      const htmlPages = (checkpoint.html_pages as { pages: CheckpointPage[] }).pages;
+      const typedCheckpoint = toCheckpoint(checkpoint as CheckpointRow);
+      const htmlPages = typedCheckpoint.html_pages.pages;
 
       // Build files array for the build Edge Function
       const files: Array<{ path: string; content: string }> = htmlPages.map(
@@ -168,17 +225,14 @@ export function useCheckpoint(): UseCheckpointReturn {
         content: generateRobotsTxt(baseUrl),
       });
 
-      // Call build Edge Function
-      const { error: buildError } = await supabase.functions.invoke("build", {
-        body: { site_spec_id: siteSpecId, files },
-      });
+      // Call build Edge Function (bypass SDK to avoid auth-lock hangs)
+      const { error: buildErr } = await invokeEdgeFunctionBypass<{
+        success?: boolean;
+        error?: string;
+      }>("build", { site_spec_id: siteSpecId, files });
 
-      if (buildError) {
-        const message =
-          typeof buildError === "object" && buildError !== null && "message" in buildError
-            ? (buildError as { message: string }).message
-            : "Deploy failed. Please try again.";
-        setError(message);
+      if (buildErr) {
+        setError(buildErr);
         return false;
       }
 

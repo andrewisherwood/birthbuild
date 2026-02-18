@@ -13,6 +13,7 @@ import {
   corsHeaders,
   isRateLimited,
   authenticateAndGetApiKey,
+  checkBodySize,
   jsonResponse,
 } from "../_shared/edge-helpers.ts";
 import { sanitiseHtml } from "../_shared/sanitise-html.ts";
@@ -99,7 +100,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
   if (authErr) return authErr;
 
   // 2. Rate limit
-  if (isRateLimited("edit-section", auth!.userId, RATE_LIMIT_MAX, RATE_LIMIT_WINDOW_MS)) {
+  if (await isRateLimited("edit-section", auth!.userId, RATE_LIMIT_MAX, RATE_LIMIT_WINDOW_MS)) {
     return jsonResponse(
       { error: "Too many edit requests. Please wait and try again." },
       429,
@@ -108,6 +109,9 @@ Deno.serve(async (req: Request): Promise<Response> => {
   }
 
   // 3. Parse body
+  const sizeErr = checkBodySize(req, cors);
+  if (sizeErr) return sizeErr;
+
   let body: EditSectionBody;
   try {
     body = await req.json();

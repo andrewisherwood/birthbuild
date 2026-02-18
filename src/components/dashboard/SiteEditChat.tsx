@@ -11,7 +11,7 @@
  */
 
 import { useState, useCallback, useRef } from "react";
-import { supabase } from "@/lib/supabase";
+import { invokeEdgeFunctionBypass } from "@/lib/auth-bypass";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { extractSection, replaceSection, getSectionNames } from "@/lib/section-parser";
@@ -145,39 +145,36 @@ export function SiteEditChat({
 
         addMessage("assistant", `Editing the "${targetSection}" section...`);
 
-        // Call edit-section Edge Function
-        const { data, error } = await supabase.functions.invoke("edit-section", {
-          body: {
-            section_html: section.html,
-            section_name: targetSection,
-            instruction,
-            context: {
-              business_name: siteSpec.business_name,
-              doula_name: siteSpec.doula_name,
-              service_area: siteSpec.service_area,
-            },
+        // Call edit-section Edge Function (bypass SDK to avoid auth-lock hangs)
+        const { data, error } = await invokeEdgeFunctionBypass<{
+          success?: boolean;
+          edited_html?: string;
+          error?: string;
+        }>("edit-section", {
+          section_html: section.html,
+          section_name: targetSection,
+          instruction,
+          context: {
+            business_name: siteSpec.business_name,
+            doula_name: siteSpec.doula_name,
+            service_area: siteSpec.service_area,
           },
         });
 
         if (error) {
-          const msg =
-            typeof error === "object" && error !== null && "message" in error
-              ? (error as { message: string }).message
-              : "Edit failed.";
-          addMessage("assistant", `Sorry, something went wrong: ${msg}`);
+          addMessage("assistant", `Sorry, something went wrong: ${error}`);
           setLoading(false);
           return;
         }
 
-        const response = data as { success?: boolean; edited_html?: string; error?: string } | undefined;
-        if (response?.error || !response?.edited_html) {
-          addMessage("assistant", response?.error ?? "Edit failed. Please try again.");
+        if (data?.error || !data?.edited_html) {
+          addMessage("assistant", data?.error ?? "Edit failed. Please try again.");
           setLoading(false);
           return;
         }
 
         // Replace the section in the page
-        const updatedHtml = replaceSection(currentPage.html, targetSection, response.edited_html);
+        const updatedHtml = replaceSection(currentPage.html, targetSection, data.edited_html);
         const updatedPages = pages.map((p) =>
           p.filename === selectedPage ? { ...p, html: updatedHtml } : p,
         );

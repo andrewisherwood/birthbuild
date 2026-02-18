@@ -13,9 +13,10 @@ import {
   isRateLimited,
   authenticateAndGetApiKey,
   createServiceClient,
+  checkBodySize,
   jsonResponse,
 } from "../_shared/edge-helpers.ts";
-import { sanitiseHtml } from "../_shared/sanitise-html.ts";
+import { sanitiseHtml, sanitiseCss } from "../_shared/sanitise-html.ts";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -88,9 +89,9 @@ function resolveSpec(spec: any): ResolvedSpec {
   let typographyScale = "default";
 
   if (spec.design) {
-    colours = spec.design.colours;
-    headingFont = spec.design.typography.headingFont;
-    bodyFont = spec.design.typography.bodyFont;
+    colours = spec.design.colours ?? PALETTES["sage_sand"]!;
+    headingFont = spec.design.typography?.headingFont ?? TYPOGRAPHY_PRESETS["modern"]!.heading;
+    bodyFont = spec.design.typography?.bodyFont ?? TYPOGRAPHY_PRESETS["modern"]!.body;
     spacingDensity = spec.design.spacing?.density ?? "default";
     borderRadius = spec.design.borderRadius ?? "rounded";
     typographyScale = spec.design.typography?.scale ?? "default";
@@ -326,7 +327,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
   if (authErr) return authErr;
 
   // 2. Rate limit
-  if (isRateLimited("generate-design-system", auth!.userId, RATE_LIMIT_MAX, RATE_LIMIT_WINDOW_MS)) {
+  if (await isRateLimited("generate-design-system", auth!.userId, RATE_LIMIT_MAX, RATE_LIMIT_WINDOW_MS)) {
     return jsonResponse(
       { error: "Too many design system generation requests. Please wait and try again." },
       429,
@@ -335,6 +336,9 @@ Deno.serve(async (req: Request): Promise<Response> => {
   }
 
   // 3. Parse body
+  const sizeErr = checkBodySize(req, cors);
+  if (sizeErr) return sizeErr;
+
   let body: { site_spec_id?: string };
   try {
     body = await req.json();
@@ -421,7 +425,23 @@ Deno.serve(async (req: Request): Promise<Response> => {
   }
 
   // deno-lint-ignore no-explicit-any
-  const claudeData: any = await claudeResponse.json();
+  let claudeData: any;
+  try {
+    claudeData = await claudeResponse.json();
+  } catch (parseErr: unknown) {
+    const detail = parseErr instanceof Error ? parseErr.message : "Unknown parse error";
+    console.error("[generate-design-system] Failed to parse Claude response:", detail);
+    return jsonResponse(
+      { error: "Failed to generate design system. Please try again." },
+      500,
+      cors,
+    );
+  }
+
+  if (claudeData.stop_reason === "max_tokens") {
+    console.error("[generate-design-system] Claude hit max_tokens limit");
+  }
+
   const toolUse = claudeData.content?.find(
     // deno-lint-ignore no-explicit-any
     (block: any) => block.type === "tool_use" && block.name === "output_design_system",
@@ -443,13 +463,14 @@ Deno.serve(async (req: Request): Promise<Response> => {
   };
 
   // 8. Sanitise output
+  const sanitisedCss = sanitiseCss(css);
   const sanitisedNavHtml = sanitiseHtml(nav_html);
   const sanitisedFooterHtml = sanitiseHtml(footer_html);
 
   return jsonResponse(
     {
       success: true,
-      css,
+      css: sanitisedCss,
       nav_html: sanitisedNavHtml,
       footer_html: sanitisedFooterHtml,
       wordmark_svg: wordmarkSvg,

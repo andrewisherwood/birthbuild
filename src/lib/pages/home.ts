@@ -99,7 +99,7 @@ export function generateHomePage(
   if (spec.bio) {
     const headshotPhoto = photos.find((p) => p.purpose === "headshot");
     const photoTag = headshotPhoto
-      ? `<img src="${escapeHtml(headshotPhoto.publicUrl)}" alt="${escapeHtml(headshotPhoto.altText)}" class="about-photo" />`
+      ? `<img src="${escapeHtml(headshotPhoto.publicUrl)}" alt="${escapeHtml(headshotPhoto.altText)}" class="about-photo" loading="lazy" />`
       : "";
     const bioTeaser = spec.bio.length > 200 ? spec.bio.substring(0, 200) + "..." : spec.bio;
     const readMore = spec.pages.includes("about")

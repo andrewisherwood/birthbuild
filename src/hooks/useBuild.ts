@@ -72,27 +72,24 @@ async function fetchPhotos(specId: string): Promise<{ photos: PhotoData[]; warni
     console.error("[useBuild] Failed to fetch photos:", photoError.message);
   }
 
-  const storagePaths = (photoRows ?? []).map((row) => row.storage_path as string);
-  const signedUrlMap: Record<string, string> = {};
-  if (storagePaths.length > 0) {
-    const { data: signedData } = await supabase.storage
-      .from("photos")
-      .createSignedUrls(storagePaths, 3600);
-    if (signedData) {
-      for (const item of signedData) {
-        if (item.signedUrl) {
-          signedUrlMap[item.path ?? ""] = item.signedUrl;
-        }
-      }
-    }
-  }
+  // Use public URLs with Supabase Image Transforms (Pro plan).
+  // The photos bucket is public so URLs never expire — safe to embed
+  // in deployed sites. Transforms cap images at 1200px wide with
+  // quality 80, typically reducing 2MB+ originals to ~100-150KB.
+  // Supabase auto-converts to WebP for supported browsers.
+  const rows = photoRows ?? [];
 
-  const photos: PhotoData[] = (photoRows ?? []).map((row) => {
-    const path = row.storage_path as string;
+  const photos: PhotoData[] = rows.map((row) => {
+    const path = String(row.storage_path ?? "");
+    const { data } = supabase.storage
+      .from("photos")
+      .getPublicUrl(path, {
+        transform: { width: 1200, quality: 80 },
+      });
     return {
-      purpose: (row.purpose as string) ?? "general",
-      publicUrl: signedUrlMap[path] ?? "",
-      altText: (row.alt_text as string) ?? "",
+      purpose: String(row.purpose ?? "general"),
+      publicUrl: data.publicUrl,
+      altText: String(row.alt_text ?? ""),
     };
   });
 
@@ -224,14 +221,22 @@ export function useBuild(siteSpec: SiteSpec | null): UseBuildReturn {
         (payload) => {
           const updated = payload.new as Record<string, unknown>;
           const newStatus: BuildStatus = {
-            status: (updated.status as SiteSpecStatus) ?? "draft",
-            deploy_url: (updated.deploy_url as string | null) ?? null,
-            preview_url: (updated.preview_url as string | null) ?? null,
-            subdomain_slug: (updated.subdomain_slug as string | null) ?? null,
+            status: (String(updated.status ?? "draft")) as SiteSpecStatus,
+            deploy_url: updated.deploy_url ? String(updated.deploy_url) : null,
+            preview_url: updated.preview_url ? String(updated.preview_url) : null,
+            subdomain_slug: updated.subdomain_slug ? String(updated.subdomain_slug) : null,
           };
           setLastBuildStatus(newStatus);
           if (newStatus.status !== "building") {
             setBuilding(false);
+            // Safety net: if the imperative setProgress("complete") didn't fire
+            // (e.g. network hiccup), the Realtime subscription ensures the
+            // progress bar reaches 100% when the backend confirms success.
+            if (newStatus.status === "preview" || newStatus.status === "live") {
+              setGenerationProgress((prev) =>
+                prev && prev.stage !== "complete" ? { ...prev, stage: "complete" } : prev,
+              );
+            }
           }
         },
       )
@@ -511,45 +516,67 @@ export function useBuild(siteSpec: SiteSpec | null): UseBuildReturn {
         }
       }
 
-      // 4. Save checkpoint
+      // 4. Save checkpoint (retry on version conflict from TOCTOU race)
       console.log("[useBuild] Saving checkpoint (%d pages)…", generatedPages.length);
       setProgress("saving");
 
-      const { data: maxRow } = await supabase
-        .from("site_checkpoints")
-        .select("version")
-        .eq("site_spec_id", spec.id)
-        .order("version", { ascending: false })
-        .limit(1)
-        .single();
+      let checkpointId: string | null = null;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        const { data: maxRow } = await supabase
+          .from("site_checkpoints")
+          .select("version")
+          .eq("site_spec_id", spec.id)
+          .order("version", { ascending: false })
+          .limit(1)
+          .single();
 
-      const nextVersion = maxRow ? (maxRow.version as number) + 1 : 1;
+        const nextVersion = maxRow ? Number(maxRow.version) + 1 : 1;
 
-      const { data: checkpoint, error: cpError } = await supabase
-        .from("site_checkpoints")
-        .insert({
-          site_spec_id: spec.id,
-          version: nextVersion,
-          html_pages: { pages: generatedPages },
-          design_system: designSystem,
-          label: `AI build v${nextVersion}`,
-        })
-        .select("id")
-        .single();
+        const { data: cpData, error: cpError } = await supabase
+          .from("site_checkpoints")
+          .insert({
+            site_spec_id: spec.id,
+            version: nextVersion,
+            html_pages: { pages: generatedPages },
+            design_system: designSystem,
+            label: `AI build v${nextVersion}`,
+          })
+          .select("id")
+          .single();
 
-      if (cpError) {
-        console.error("[useBuild] Checkpoint save error:", cpError.message);
+        if (!cpError && cpData) {
+          checkpointId = cpData.id as string;
+          break;
+        }
+
+        if (cpError?.code === "23505" && attempt < 2) {
+          console.warn(`[useBuild] Version conflict (attempt ${attempt + 1}), retrying…`);
+          continue;
+        }
+
+        console.error("[useBuild] Checkpoint save error:", cpError?.message);
         setBuildError("Failed to save checkpoint. Your pages were generated but not saved.");
         setProgress("error", 0, 0, "Checkpoint save failed.");
         setBuilding(false);
         return;
       }
 
+      if (!checkpointId) {
+        setBuildError("Failed to save checkpoint after retries.");
+        setProgress("error", 0, 0, "Checkpoint save failed.");
+        setBuilding(false);
+        return;
+      }
+
       // Update latest_checkpoint_id
-      await supabase
+      const { error: cpLinkError } = await supabase
         .from("site_specs")
-        .update({ latest_checkpoint_id: checkpoint?.id })
+        .update({ latest_checkpoint_id: checkpointId })
         .eq("id", spec.id);
+
+      if (cpLinkError) {
+        console.error("[useBuild] Failed to update latest_checkpoint_id:", cpLinkError.message);
+      }
 
       // 5. Generate sitemap + robots and deploy
       console.log("[useBuild] Deploying to Netlify…");
@@ -599,10 +626,10 @@ export function useBuild(siteSpec: SiteSpec | null): UseBuildReturn {
 
       if (updatedSpec) {
         setLastBuildStatus({
-          status: (updatedSpec.status as SiteSpecStatus) ?? "preview",
-          deploy_url: updatedSpec.deploy_url as string | null,
-          preview_url: updatedSpec.preview_url as string | null,
-          subdomain_slug: updatedSpec.subdomain_slug as string | null,
+          status: String(updatedSpec.status ?? "preview") as SiteSpecStatus,
+          deploy_url: updatedSpec.deploy_url ? String(updatedSpec.deploy_url) : null,
+          preview_url: updatedSpec.preview_url ? String(updatedSpec.preview_url) : null,
+          subdomain_slug: updatedSpec.subdomain_slug ? String(updatedSpec.subdomain_slug) : null,
         });
       }
 

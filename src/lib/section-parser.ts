@@ -17,36 +17,23 @@ export interface ParsedSection {
 }
 
 // ---------------------------------------------------------------------------
-// Regex
-// ---------------------------------------------------------------------------
-
-/**
- * Matches opening and closing section markers:
- *   <!-- bb-section:hero --> ... <!-- /bb-section:hero -->
- *
- * Capture groups:
- *   1: section name
- *   2: inner content (including the content between markers)
- */
-const SECTION_RE =
-  /<!-- bb-section:(\w[\w-]*) -->([\s\S]*?)<!-- \/bb-section:\1 -->/g;
-
-// ---------------------------------------------------------------------------
 // Parse all sections
 // ---------------------------------------------------------------------------
 
 /**
  * Parse all sections from an HTML string.
  * Returns sections in document order.
+ *
+ * The regex is constructed locally each call to avoid shared mutable state
+ * from the `g` flag's `lastIndex` — a module-level stateful regex is a
+ * concurrency correctness bug when multiple callers share the same regex.
  */
 export function parseSections(html: string): ParsedSection[] {
+  const re = /<!-- bb-section:(\w[\w-]*) -->([\s\S]*?)<!-- \/bb-section:\1 -->/g;
   const sections: ParsedSection[] = [];
   let match: RegExpExecArray | null;
 
-  // Reset lastIndex since we reuse the regex
-  SECTION_RE.lastIndex = 0;
-
-  while ((match = SECTION_RE.exec(html)) !== null) {
+  while ((match = re.exec(html)) !== null) {
     sections.push({
       name: match[1]!,
       html: match[0],

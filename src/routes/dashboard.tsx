@@ -23,7 +23,7 @@ export default function DashboardPage() {
   const { photos } = usePhotoUpload(siteSpec?.id ?? null);
   const { debouncedUpdate } = useDebouncedSave({ updateSiteSpec, patchLocal });
 
-  const isInstructor = profile?.role === "instructor";
+  const isInstructor = profile?.role === "instructor" || profile?.role === "admin";
 
   if (authLoading || specLoading) {
     return (

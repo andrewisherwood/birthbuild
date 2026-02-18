@@ -136,9 +136,20 @@ export function generateHead(
 
   const css = generateCss(colours, headingFont, bodyFont, spec.style, designTokens);
 
+  const csp = [
+    "default-src 'none'",
+    "style-src 'unsafe-inline' https://fonts.googleapis.com",
+    "font-src https://fonts.gstatic.com",
+    "img-src 'self' https://*.supabase.co data:",
+    "form-action 'self'",
+    "base-uri 'none'",
+    "frame-ancestors 'none'",
+  ].join("; ");
+
   return `<head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta http-equiv="Content-Security-Policy" content="${csp}" />
     <title>${escapedTitle}</title>
     <meta name="description" content="${escapedDescription}" />
     <meta property="og:title" content="${escapedTitle}" />
@@ -457,7 +468,8 @@ export function generateCss(
     /* About page */
     .about-grid { display: grid; gap: 2rem; }
     @media (min-width: 769px) { .about-grid { grid-template-columns: 2fr 1fr; } }
-    .about-photo { border-radius: var(--img-radius); width: 100%; object-fit: cover; }
+    .about-photo { border-radius: var(--img-radius); width: 100%; max-height: 28rem; object-fit: cover; object-position: center top; }
+    @media (max-width: 768px) { .about-photo { max-height: 20rem; aspect-ratio: 4/3; } }
     .qualifications { margin-top: 2rem; padding: var(--card-padding); background: rgba(0,0,0,0.02); border-radius: var(--radius); }
 
     /* Schema.org JSON-LD does not need styles */

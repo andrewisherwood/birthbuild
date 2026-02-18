@@ -67,11 +67,20 @@ export async function getAccessTokenDirect(): Promise<string | null> {
       expires_in: number;
     };
 
-    // Persist the refreshed session so the SDK picks it up on next page load
-    const updated: StoredSession = {
+    // Merge refreshed tokens into the existing stored object so the SDK's
+    // additional fields (user, token_type, etc.) are preserved.
+    let existing: Record<string, unknown> = {};
+    try {
+      existing = JSON.parse(raw) as Record<string, unknown>;
+    } catch {
+      // If the existing value is unparseable, start fresh
+    }
+    const updated = {
+      ...existing,
       access_token: data.access_token,
       refresh_token: data.refresh_token,
       expires_at: now + data.expires_in,
+      expires_in: data.expires_in,
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
 
@@ -95,18 +104,25 @@ export async function invokeEdgeFunctionBypass<T = unknown>(
 
   const url = `${SUPABASE_URL}/functions/v1/${functionName}`;
 
-  const response = await fetch(url, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${accessToken}`,
-      apikey: SUPABASE_ANON_KEY,
-    },
-    body: JSON.stringify(body),
-  });
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${accessToken}`,
+        apikey: SUPABASE_ANON_KEY,
+      },
+      body: JSON.stringify(body),
+    });
+  } catch (err: unknown) {
+    const detail = err instanceof Error ? err.message : "Network error";
+    console.error(`[invokeEdgeFunctionBypass] fetch failed for ${functionName}:`, detail);
+    return { data: null, error: "Network error. Please check your connection and try again." };
+  }
 
   if (!response.ok) {
-    const text = await response.text();
+    const text = await response.text().catch(() => "");
     let errorMessage = `HTTP ${response.status}`;
     try {
       const parsed = JSON.parse(text) as { error?: string };
@@ -117,6 +133,11 @@ export async function invokeEdgeFunctionBypass<T = unknown>(
     return { data: null, error: errorMessage };
   }
 
-  const data = (await response.json()) as T;
-  return { data, error: null };
+  try {
+    const data = (await response.json()) as T;
+    return { data, error: null };
+  } catch {
+    console.error(`[invokeEdgeFunctionBypass] Failed to parse JSON from ${functionName}`);
+    return { data: null, error: "Unexpected response from server." };
+  }
 }

@@ -34,40 +34,73 @@ export function corsHeaders(origin: string | null): Record<string, string> {
 }
 
 // ---------------------------------------------------------------------------
-// Rate limiting (in-memory, per-user)
+// Rate limiting (DB-backed, survives cold starts)
 // ---------------------------------------------------------------------------
-
-interface RateLimitEntry {
-  count: number;
-  resetTime: number;
-}
-
-const rateLimitMaps = new Map<string, Map<string, RateLimitEntry>>();
 
 /**
  * Check if a user is rate-limited for a given scope.
- * Each scope (e.g. "generate-design-system") has its own counter.
+ * Uses the check_rate_limit RPC which atomically checks + increments
+ * a counter in the rate_limits table.
+ *
+ * Returns true if the user IS rate-limited (should be blocked).
  */
-export function isRateLimited(
+export async function isRateLimited(
   scope: string,
   userId: string,
   maxRequests: number,
   windowMs: number,
-): boolean {
-  if (!rateLimitMaps.has(scope)) {
-    rateLimitMaps.set(scope, new Map());
-  }
-  const map = rateLimitMaps.get(scope)!;
-  const now = Date.now();
-  const entry = map.get(userId);
+): Promise<boolean> {
+  const windowSecs = Math.ceil(windowMs / 1000);
 
-  if (!entry || now > entry.resetTime) {
-    map.set(userId, { count: 1, resetTime: now + windowMs });
+  try {
+    const serviceClient = createServiceClient();
+    const { data, error } = await serviceClient.rpc("check_rate_limit", {
+      p_scope: scope,
+      p_user_id: userId,
+      p_max_requests: maxRequests,
+      p_window_secs: windowSecs,
+    });
+
+    if (error) {
+      // If the rate limit check fails, allow the request (fail open)
+      // but log the error for monitoring.
+      console.error(`[rate-limit] RPC error for ${scope}:`, error.message);
+      return false;
+    }
+
+    // RPC returns true if ALLOWED, we return true if LIMITED
+    return data === false;
+  } catch (err: unknown) {
+    const detail = err instanceof Error ? err.message : "Unknown error";
+    console.error(`[rate-limit] Unexpected error for ${scope}:`, detail);
     return false;
   }
+}
 
-  entry.count += 1;
-  return entry.count > maxRequests;
+// ---------------------------------------------------------------------------
+// Body size validation
+// ---------------------------------------------------------------------------
+
+const DEFAULT_MAX_BODY_BYTES = 1_048_576; // 1 MB
+
+/**
+ * Check Content-Length header and reject oversized payloads before parsing.
+ * Returns an error Response if too large, null if OK.
+ */
+export function checkBodySize(
+  req: Request,
+  cors: Record<string, string>,
+  maxBytes = DEFAULT_MAX_BODY_BYTES,
+): Response | null {
+  const contentLength = req.headers.get("content-length");
+  if (contentLength && parseInt(contentLength, 10) > maxBytes) {
+    return jsonResponse(
+      { error: `Request body too large. Maximum size is ${Math.round(maxBytes / 1024)}KB.` },
+      413,
+      cors,
+    );
+  }
+  return null;
 }
 
 // ---------------------------------------------------------------------------

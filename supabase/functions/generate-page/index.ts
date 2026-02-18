@@ -13,6 +13,7 @@ import {
   isRateLimited,
   authenticateAndGetApiKey,
   createServiceClient,
+  checkBodySize,
   jsonResponse,
 } from "../_shared/edge-helpers.ts";
 import { sanitiseHtml } from "../_shared/sanitise-html.ts";
@@ -223,6 +224,7 @@ Generate a complete \`<!DOCTYPE html>\` page with:
 1. \`<html lang="en-GB">\`
 2. \`<head>\` with:
    - charset utf-8, viewport meta
+   - Content-Security-Policy meta tag: \`<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' https://*.supabase.co data:; form-action 'self'; base-uri 'none'; frame-ancestors 'none'">\`
    - SEO title and description (unique to this page)
    - Open Graph and Twitter Card meta tags
    - Google Fonts \`<link>\` (preconnect + stylesheet)
@@ -231,7 +233,7 @@ Generate a complete \`<!DOCTYPE html>\` page with:
    - The navigation HTML (with {{ACTIVE_PAGE}} replaced with "${page}")
    - \`<main id="main">\` containing all page sections with markers
    - The footer HTML
-4. If photos are available, insert \`<img>\` tags with the provided URLs and alt text
+4. If photos are available, insert \`<img>\` tags with the provided URLs, alt text, and \`loading="lazy"\`
 
 ## Constraints
 - Semantic HTML5 with proper landmark roles
@@ -283,7 +285,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
   if (authErr) return authErr;
 
   // 2. Rate limit
-  if (isRateLimited("generate-page", auth!.userId, RATE_LIMIT_MAX, RATE_LIMIT_WINDOW_MS)) {
+  if (await isRateLimited("generate-page", auth!.userId, RATE_LIMIT_MAX, RATE_LIMIT_WINDOW_MS)) {
     return jsonResponse(
       { error: "Too many page generation requests. Please wait and try again." },
       429,
@@ -292,6 +294,9 @@ Deno.serve(async (req: Request): Promise<Response> => {
   }
 
   // 3. Parse body
+  const sizeErr = checkBodySize(req, cors);
+  if (sizeErr) return sizeErr;
+
   let body: PageRequestBody;
   try {
     body = await req.json();
@@ -405,6 +410,18 @@ Use the output_page tool to return the complete HTML page.`;
 
   if (claudeData.stop_reason === "max_tokens") {
     console.error(`[generate-page:${body.page}] Claude hit max_tokens limit`);
+    // Check if the tool call completed despite the truncation
+    const partialToolUse = claudeData.content?.find(
+      // deno-lint-ignore no-explicit-any
+      (block: any) => block.type === "tool_use" && block.name === "output_page",
+    );
+    if (!partialToolUse?.input?.html) {
+      return jsonResponse(
+        { error: `Page generation for ${body.page} was cut short. Please try again.` },
+        500,
+        cors,
+      );
+    }
   }
 
   const toolUse = claudeData.content?.find(

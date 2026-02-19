@@ -1,30 +1,10 @@
----
-title: "What Every Doula Website Needs: The Complete Checklist"
-slug: doula-website-checklist
-description: "The essential checklist for doula websites. Every element your site needs to build trust, rank locally, and turn visitors into enquiries. Printable, practical, no fluff."
-category: website-building
-date: "2026-02-17"
-updated: "2026-02-19"
-keywords:
-  - doula website checklist
-  - what to put on doula website
-  - doula website essentials
-  - doula website must haves
-  - doula website content
-faq:
-  - q: "What pages does a doula website need?"
-    a: "Every doula website needs a homepage, about page, services page, testimonials, FAQ page, and contact page. A blog is recommended for long-term SEO. Each page should include a clear call to action, your service area, and be mobile-friendly."
-  - q: "What should I put on my doula homepage?"
-    a: "Your doula homepage needs a hero section with a professional photo of you, a clear headline stating what you do and where, a call to action button, a brief explanation of what a doula is, an overview of your services, one or two testimonials, and a teaser linking to your about page."
-  - q: "Should I show my prices on my doula website?"
-    a: "Yes, showing prices or starting rates is recommended. It helps families self-qualify before contacting you, reduces time on discovery calls with people outside your budget, and helps your site rank for popular search terms like how much does a doula cost."
-  - q: "How do I get testimonials for my doula website?"
-    a: "Ask every family after your final postnatal visit. Provide a prompt such as what was your experience of having doula support and would you recommend it. Ask for permission to use their first name and context like birth type and location. Also encourage Google reviews for local SEO benefit."
-  - q: "What is the most important thing for doula website SEO?"
-    a: "For local SEO, the most important steps are setting up a Google Business Profile, including your service area on every page of your website, collecting Google reviews, and listing in relevant doula directories. These fundamentals will make you more visible than most doula websites."
-relatedSlugs:
-  - how-to-build-a-doula-website
-  - doula-website-examples
+# What Every Doula Website Needs: The Complete Checklist
+
+**Meta title:** What Every Doula Website Needs: The Complete Checklist (2026)
+**Meta description:** The essential checklist for doula websites. Every element your site needs to build trust, rank locally, and turn visitors into enquiries. Printable, practical, no fluff.
+**Primary keyword:** doula website checklist
+**Secondary keywords:** what to put on doula website, doula website essentials, doula website must haves, doula website content
+
 ---
 
 You know that feeling when you're packing for a birth and you run through your checklist one more time. Tens unit. Massage oil. Snacks. Battery pack. Affirmation cards. You've done this enough times to know that the thing you forget is the thing you'll need at 3am.
@@ -321,3 +301,60 @@ Working through this checklist on a general-purpose website builder takes most d
 BirthBuild creates your website with every element on this checklist built in from the start. You have a conversation about your practice. It builds the site. Homepage, about, services, testimonials, FAQ, contact. Structured exactly this way. Local SEO baked in. Schema included. Mobile responsive. Fast.
 
 Every item on the checklist. Done. Before your tea goes cold.
+
+---
+
+**Ready to tick every box without the DIY?** BirthBuild creates professional doula websites with all of this built in. [Try BirthBuild →]
+
+---
+
+*Last updated: February 2026*
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "What pages does a doula website need?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Every doula website needs a homepage, about page, services page, testimonials, FAQ page, and contact page. A blog is recommended for long-term SEO. Each page should include a clear call to action, your service area, and be mobile-friendly."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "What should I put on my doula homepage?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Your doula homepage needs a hero section with a professional photo of you, a clear headline stating what you do and where, a call to action button, a brief explanation of what a doula is, an overview of your services, one or two testimonials, and a teaser linking to your about page."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Should I show my prices on my doula website?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Yes, showing prices or starting rates is recommended. It helps families self-qualify before contacting you, reduces time on discovery calls with people outside your budget, and helps your site rank for popular search terms like how much does a doula cost."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "How do I get testimonials for my doula website?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Ask every family after your final postnatal visit. Provide a prompt such as what was your experience of having doula support and would you recommend it. Ask for permission to use their first name and context like birth type and location. Also encourage Google reviews for local SEO benefit."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "What is the most important thing for doula website SEO?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "For local SEO, the most important steps are setting up a Google Business Profile, including your service area on every page of your website, collecting Google reviews, and listing in relevant doula directories. These fundamentals will make you more visible than most doula websites."
+      }
+    }
+  ]
+}
+</script>

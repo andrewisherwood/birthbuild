@@ -17,6 +17,7 @@ See `uk-doula-website-research.md` for design patterns, colour palettes, accessi
 - **Auth:** Supabase Auth (magic link, email-based)
 - **Storage:** Supabase Storage (photo uploads, generated assets)
 - **AI:** Claude API (Anthropic) — proxied through Edge Functions, never client-side
+- **Blog:** Custom TypeScript build script (marked, gray-matter) — Markdown to static HTML
 - **Deployment (generated sites):** Netlify Deploy API
 - **Package manager:** npm
 
@@ -152,6 +153,25 @@ birthbuild/
 │   │   ├── delete-site/index.ts   # Delete site (Netlify + storage + DB cleanup)
 │   │   └── invite/index.ts        # Generate magic link invites
 │   └── seed.sql                   # Dev seed data
+├── blog/                          # Static blog system
+│   ├── build-blog.ts              # Build script: Markdown → static HTML
+│   ├── content/                   # Markdown articles with YAML frontmatter
+│   │   ├── _data/
+│   │   │   └── authors.json       # Author metadata
+│   │   ├── best-website-builder-for-doulas.md
+│   │   └── ...                    # More articles
+│   ├── assets/
+│   │   ├── blog.css               # Blog-specific styles
+│   │   └── images/                # Blog images
+│   └── templates/
+│       ├── index.html             # Blog index page template
+│       ├── post.html              # Article page template (sticky TOC, FAQ)
+│       └── partials/
+│           ├── head.html          # Shared <head> (CSS vars, fonts, OG tags)
+│           ├── nav.html           # Blog nav (matches landing page)
+│           ├── footer.html        # Blog footer (matches landing page)
+│           ├── cta-banner.html    # Mid-article CTA
+│           └── post-card.html     # Post card for grids
 └── templates/                     # Static site template assets
     ├── base/                      # Base HTML/CSS structure
     ├── palettes/                  # Colour palette CSS variables
@@ -190,6 +210,10 @@ birthbuild/
 - **DB-backed rate limiting** — `check_rate_limit` RPC atomically upserts counters with sliding window expiry. Replaces in-memory Maps that reset on cold starts. Fails open if DB call errors.
 - **Content Security Policy** — All generated site pages include CSP meta tags: `default-src 'none'`, allows inline styles + Google Fonts, Supabase storage images, form submissions. Blocks scripts and iframes.
 - **HTML/CSS sanitisation** — All LLM-generated HTML is sanitised via regex-based stripping of `<script>`, event handlers, `javascript:` URLs, `<base>` tags, CSS `@import`/`expression()`/`url()` injection.
+- **Static blog** — Markdown files with YAML frontmatter in `blog/content/` compiled to static HTML by `blog/build-blog.ts`. Build outputs to `public/blog/` (gitignored). Templates use `{{PLACEHOLDER}}` replacement. Blog build runs before Vite build so `public/blog/` is copied to `dist/blog/`. The blog shares the landing page design system (Cormorant Garamond + Outfit, sage/sand/cream palette) via CSS custom properties declared in the head partial.
+- **Blog frontmatter schema** — Required fields: `title`, `slug`, `description`, `category`, `date`. Optional: `updated`, `readingTime`, `featured`, `keywords`, `faq` (array of `{q, a}`), `relatedSlugs`. Categories: `website-building`, `marketing-seo`, `website-strategy`, `starting-out`, `birth-education`, `industry-tech`, `community`.
+- **Blog SEO** — Each article page includes Article JSON-LD, BreadcrumbList JSON-LD, and (if `faq` present) FAQPage JSON-LD. Index page has Open Graph + Twitter Card meta. Auto-generated `sitemap.xml` at `/blog/sitemap.xml`.
+- **Blog interactivity** — Vanilla JS only (no framework). Category filtering on index via `data-category` attributes + URL hash state. Sticky TOC on articles with IntersectionObserver scroll tracking (desktop sidebar, mobile collapsible dropdown).
 
 ### Component Conventions
 
@@ -210,8 +234,11 @@ npm run dev
 # Type checking
 npx tsc --noEmit
 
-# Build for production
+# Build for production (blog + tsc + vite)
 npm run build
+
+# Build blog only
+npm run build:blog
 
 # Preview production build
 npm run preview

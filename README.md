@@ -14,6 +14,7 @@ Built for doulas. Designed to scale to any solo practitioner profession.
 - **Backend:** Supabase (Postgres, Auth, Edge Functions, Storage)
 - **AI:** Claude API (content generation, chatbot)
 - **Build:** MAI pipeline (static site generation from structured spec)
+- **Blog:** Custom TypeScript build script (Markdown → static HTML)
 - **Hosting:** Netlify (auto-provisioned subdomains)
 
 ## Features
@@ -28,6 +29,7 @@ Built for doulas. Designed to scale to any solo practitioner profession.
 - Multi-tenant instructor model (workshop-ready)
 - Instructor site management — create, preview, publish, and delete multiple sites
 - Edit and rebuild via chat or dashboard
+- SEO-optimised blog with article JSON-LD, FAQ schema, and auto-generated sitemap
 
 ## Getting Started
 

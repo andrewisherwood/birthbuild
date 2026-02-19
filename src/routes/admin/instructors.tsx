@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { AdminShell } from "@/components/admin/AdminShell";
 import { Button } from "@/components/ui/Button";
-import { supabase } from "@/lib/supabase";
+import { invokeEdgeFunctionBypass } from "@/lib/auth-bypass";
 
 interface InviteResult {
   magic_link: string;
@@ -23,13 +23,16 @@ export default function AdminInstructorsPage() {
     setSubmitting(true);
 
     try {
-      const { data, error: fnError } = await supabase.functions.invoke(
-        "invite-instructor",
-        { body: { email: email.trim().toLowerCase(), org_name: orgName.trim() } },
-      );
+      const { data, error: fnError } = await invokeEdgeFunctionBypass<{
+        magic_link: string;
+        error?: string;
+      }>("invite-instructor", {
+        email: email.trim().toLowerCase(),
+        org_name: orgName.trim(),
+      });
 
       if (fnError) {
-        setError(fnError.message || "Failed to invite instructor.");
+        setError(fnError);
         return;
       }
 
@@ -38,7 +41,7 @@ export default function AdminInstructorsPage() {
         return;
       }
 
-      setResult({ magic_link: data.magic_link, email: email.trim().toLowerCase() });
+      setResult({ magic_link: data!.magic_link, email: email.trim().toLowerCase() });
       setEmail("");
       setOrgName("");
     } catch {

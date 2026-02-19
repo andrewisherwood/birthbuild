@@ -650,9 +650,11 @@ Deno.serve(async (req: Request): Promise<Response> => {
     );
   }
 
-  // SEC-011: Validate ALL messages for length (not just the last one)
+  // SEC-011: Validate user messages for length (assistant messages may contain
+  // generated bios/content that legitimately exceed the per-message limit)
   for (const msg of body.messages) {
     if (
+      msg.role === "user" &&
       typeof msg.content === "string" &&
       msg.content.length > MAX_MESSAGE_LENGTH
     ) {

@@ -102,7 +102,8 @@ birthbuild/
 │   │       └── UsageMetrics.tsx
 │   ├── lib/
 │   │   ├── supabase.ts            # Supabase client init
-│   │   ├── auth-bypass.ts         # SDK bypass for Edge Function calls (avoids auth lock hangs)
+│   │   ├── auth-bypass.ts         # SDK bypass for Edge Functions + Storage (avoids auth lock hangs)
+│   │   ├── density-score.ts       # Spec density scoring algorithm
 │   │   ├── claude.ts              # Claude API call helpers (via Edge Function)
 │   │   ├── chat-prompts.ts        # System prompts and step definitions for chat
 │   │   ├── chat-tools.ts          # Tool definitions and spec-update mapping
@@ -139,7 +140,8 @@ birthbuild/
 │   │   ├── 005_admin_role.sql      # Admin role + instructor invite EF
 │   │   ├── 006_llm_generation.sql  # site_checkpoints table, retention trigger, RLS
 │   │   ├── 007_public_photos_bucket.sql # Public bucket for permanent image URLs
-│   │   └── 008_rate_limit_table.sql    # DB-backed rate limiting
+│   │   ├── 008_rate_limit_table.sql    # DB-backed rate limiting
+│   │   └── 009_spec_density_fields.sql # Spec density depth fields (bio, training, philosophy)
 │   ├── functions/
 │   │   ├── _shared/
 │   │   │   ├── edge-helpers.ts    # CORS, auth, DB-backed rate limiting, body size validation
@@ -151,7 +153,9 @@ birthbuild/
 │   │   ├── edit-section/index.ts            # LLM: AI-powered section editing
 │   │   ├── publish/index.ts       # Publish (add custom domain) / unpublish
 │   │   ├── delete-site/index.ts   # Delete site (Netlify + storage + DB cleanup)
-│   │   └── invite/index.ts        # Generate magic link invites
+│   │   ├── invite/index.ts        # Generate magic link invites for students
+│   │   ├── invite-instructor/index.ts # Generate instructor account + magic link
+│   │   └── design-chat/index.ts   # Claude API proxy for design editing chat
 │   └── seed.sql                   # Dev seed data
 ├── blog/                          # Static blog system
 │   ├── build-blog.ts              # Build script: Markdown → static HTML
@@ -204,9 +208,15 @@ birthbuild/
 - **Two build paths** — Template build (deterministic, client-side HTML generation) and LLM build (AI-generated pages via Edge Functions). The LLM path: generate-design-system → generate-page (parallel, per page) → save checkpoint → deploy to Netlify.
 - **Checkpoint system** — Versioned HTML snapshots in `site_checkpoints` table. Each checkpoint stores full HTML pages + cached design system. Retention trigger prunes to last 10 per site. Unique constraint on `(site_spec_id, version)` with retry logic for concurrent writes.
 - **Section markers** — `<!-- bb-section:name -->...<!-- /bb-section:name -->` HTML comments enable deterministic editing (reorder, remove, replace) without re-running the LLM.
-- **SDK auth bypass** — `invokeEdgeFunctionBypass()` in `auth-bypass.ts` uses raw `fetch()` to call Edge Functions, bypassing the Supabase SDK's auth lock which can hang under React 18 Strict Mode double-mounts. All Edge Function calls from hooks use this.
+- **Generated site visual components** — Both template and LLM build paths produce consistent visual patterns:
+  - **Hero overlay** — Hero photo (purpose `hero`) renders as full-bleed background with dark gradient overlay (`rgba(0,0,0,0.55)` → `rgba(0,0,0,0.15)`) and white text/CTA on top. Falls back to `.hero--text-only` text-only hero when no hero photo exists. CSS classes: `.hero`, `.hero__bg`, `.hero__overlay`, `.hero__content`, `.hero__tagline`, `.btn--hero`.
+  - **Service cards with images** — Gallery photos (purpose `gallery`) distributed across the first 3 homepage service preview cards. Cards with images use `.card--service` (zero-padding flex column with overflow hidden), `.card__image` (200px height, cover, hover scale), `.card__body` (padded text), `.card__link` (CTA-coloured arrow). Falls back to plain `.card` when no gallery photos.
+  - **SVG social icons** — Footer social links render as inline SVG icons (Facebook, Instagram, TikTok, LinkedIn, X/Twitter + generic globe fallback) inside 44×44px circular buttons. `aria-label` on each `<a>`, `aria-hidden="true"` on each SVG. Hover lifts with `translateY(-2px)`. Defined in `SOCIAL_ICONS` map in `shared.ts`.
+- **SDK auth bypass** — `auth-bypass.ts` provides raw `fetch()` wrappers that bypass the Supabase SDK's auth lock (which hangs under React 18 Strict Mode double-mounts): `invokeEdgeFunctionBypass()` for Edge Functions, `uploadStorageBypass()`/`removeStorageBypass()` for Storage uploads/deletes, and `getPublicStorageUrl()` for public bucket URLs. All client-side Supabase API calls (Edge Functions, Storage writes) must use these bypasses — never use `supabase.functions.invoke()` or `supabase.storage.upload()`/`remove()` directly.
 - **10-second loading backstop** — All data-fetching hooks (`useSiteSpec`, `usePhotoUpload`, `useCheckpoint`) cap their loading state at 10 seconds to prevent permanent spinners from SDK hangs.
-- **Public photos bucket** — Photos bucket is public for permanent image URLs. Supabase Image Transforms (Pro plan) resize to 1200px wide, quality 80, auto WebP. Upload/delete policies remain scoped to authenticated users.
+- **Public photos bucket** — Photos bucket is public for permanent image URLs via `getPublicStorageUrl()`. No signed URLs needed. Supabase Image Transforms (Pro plan) resize to 1200px wide, quality 80, auto WebP. Upload/delete policies remain scoped to authenticated users.
+- **Edge Function JWT handling** — All Edge Functions are deployed with `verify_jwt: false` (Supabase gateway JWT validation disabled) because the gateway intermittently rejects valid tokens. Each function validates the JWT internally via `edge-helpers.ts`. This is defence-in-depth: the function-level auth is the primary gate.
+- **Chat edge function limits** — `max_tokens: 4096` for Claude API output. Per-message length validation (`MAX_MESSAGE_LENGTH = 4_000`) only applies to user messages — assistant messages legitimately contain generated bios/content that exceed this. Total payload capped at 100KB.
 - **DB-backed rate limiting** — `check_rate_limit` RPC atomically upserts counters with sliding window expiry. Replaces in-memory Maps that reset on cold starts. Fails open if DB call errors.
 - **Content Security Policy** — All generated site pages include CSP meta tags: `default-src 'none'`, allows inline styles + Google Fonts, Supabase storage images, form submissions. Blocks scripts and iframes.
 - **HTML/CSS sanitisation** — All LLM-generated HTML is sanitised via regex-based stripping of `<script>`, event handlers, `javascript:` URLs, `<base>` tags, CSS `@import`/`expression()`/`url()` injection.
@@ -250,15 +260,18 @@ npx supabase db reset          # Apply migrations + seed
 # Generate Supabase types
 npx supabase gen types typescript --local > src/types/database.ts
 
-# Deploy Edge Functions
-npx supabase functions deploy chat
-npx supabase functions deploy build
-npx supabase functions deploy generate-design-system
-npx supabase functions deploy generate-page
-npx supabase functions deploy edit-section
-npx supabase functions deploy publish
-npx supabase functions deploy delete-site
-npx supabase functions deploy invite
+# Deploy Edge Functions (--no-verify-jwt required: gateway JWT validation is
+# disabled; each function validates auth internally via edge-helpers.ts)
+npx supabase functions deploy chat --no-verify-jwt
+npx supabase functions deploy build --no-verify-jwt
+npx supabase functions deploy generate-design-system --no-verify-jwt
+npx supabase functions deploy generate-page --no-verify-jwt
+npx supabase functions deploy edit-section --no-verify-jwt
+npx supabase functions deploy publish --no-verify-jwt
+npx supabase functions deploy delete-site --no-verify-jwt
+npx supabase functions deploy invite --no-verify-jwt
+npx supabase functions deploy invite-instructor --no-verify-jwt
+npx supabase functions deploy design-chat --no-verify-jwt
 
 # Lint
 npx eslint src/

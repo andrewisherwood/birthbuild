@@ -11,6 +11,7 @@ import type {
   SiteSpec,
   ServiceItem,
   SocialLinks,
+  CustomColours,
   StyleOption,
   PaletteOption,
   TypographyOption,
@@ -24,7 +25,7 @@ export const CHAT_TOOLS: ClaudeToolDefinition[] = [
   {
     name: "update_business_info",
     description:
-      "Save or update the birth worker's business information. Call this whenever the user provides their business name, name, service area, or services.",
+      "Save or update the birth worker's business information. Call this whenever the user provides their business name, name, location, service area, or services.",
     input_schema: {
       type: "object",
       properties: {
@@ -36,14 +37,18 @@ export const CHAT_TOOLS: ClaudeToolDefinition[] = [
           type: "string",
           description: "The birth worker's full name",
         },
+        primary_location: {
+          type: "string",
+          description: "Where the birth worker is based (e.g., 'Brighton')",
+        },
         service_area: {
           type: "string",
           description:
-            "Geographic area where the birth worker provides services (e.g., 'Bristol and surrounding areas')",
+            "Geographic areas covered, comma-separated (e.g., 'Brighton, Hove, Lewes, Shoreham')",
         },
         services: {
           type: "array",
-          description: "List of services offered",
+          description: "List of services offered with optional depth fields",
           items: {
             type: "object",
             properties: {
@@ -57,6 +62,27 @@ export const CHAT_TOOLS: ClaudeToolDefinition[] = [
                 type: "string",
                 description: "Price or price range (e.g., 'From £500')",
               },
+              birth_types: {
+                type: "array",
+                items: { type: "string" },
+                description:
+                  "Types of birth supported (e.g., 'home', 'hospital', 'vbac'). Only for birth doula services.",
+              },
+              format: {
+                type: "string",
+                description:
+                  "Teaching format: 'group', 'private', or 'both'. Only for hypnobirthing/antenatal.",
+              },
+              programme: {
+                type: "string",
+                description:
+                  "Which programme they teach (e.g., 'KGH', 'Calm Birth School'). Only for hypnobirthing.",
+              },
+              experience_level: {
+                type: "string",
+                description:
+                  "How many families supported: 'starting_out', '10-30', '30-60', '60-100', '100+'",
+              },
             },
             required: ["type", "title", "description", "price"],
           },
@@ -67,7 +93,7 @@ export const CHAT_TOOLS: ClaudeToolDefinition[] = [
   {
     name: "update_style",
     description:
-      "Save or update the website design preferences including style, colour palette, and typography.",
+      "Save or update the website design preferences including style, colour palette, custom colours, typography, font choices, brand feeling, and inspiration.",
     input_schema: {
       type: "object",
       properties: {
@@ -81,10 +107,47 @@ export const CHAT_TOOLS: ClaudeToolDefinition[] = [
           enum: ["sage_sand", "blush_neutral", "deep_earth", "ocean_calm", "custom"],
           description: "Colour palette for the website",
         },
+        custom_colours: {
+          type: "object",
+          description:
+            "Custom colour hex values and optional descriptions. Only used when palette is 'custom'.",
+          properties: {
+            background: { type: "string", description: "Background colour hex (e.g. '#FAF6F1')" },
+            primary: { type: "string", description: "Primary/heading colour hex (e.g. '#B7553A')" },
+            accent: { type: "string", description: "Accent/secondary colour hex (e.g. '#2A6B6A')" },
+            text: { type: "string", description: "Body text colour hex (e.g. '#2D2926')" },
+            cta: { type: "string", description: "CTA button colour hex (e.g. '#B7553A')" },
+            primary_description: { type: "string", description: "User's original description of the primary colour (e.g. 'terracotta/rust')" },
+            accent_description: { type: "string", description: "User's original description of the accent colour (e.g. 'deep peacock teal')" },
+            background_description: { type: "string", description: "User's original description of the background colour" },
+            text_description: { type: "string", description: "User's original description of the text colour" },
+            cta_description: { type: "string", description: "User's original description of the CTA colour" },
+          },
+          required: ["background", "primary", "accent", "text", "cta"],
+        },
         typography: {
           type: "string",
           enum: ["modern", "classic", "mixed"],
-          description: "Typography style",
+          description: "Typography style preset",
+        },
+        font_heading: {
+          type: "string",
+          description:
+            "Exact heading font name if the user specified one (e.g. 'Montserrat'). Overrides the typography preset.",
+        },
+        font_body: {
+          type: "string",
+          description:
+            "Exact body font name if the user specified one (e.g. 'Lora'). Overrides the typography preset.",
+        },
+        brand_feeling: {
+          type: "string",
+          description:
+            "The feeling/vibe the birth worker wants visitors to get from their site (e.g., 'warm and earthy', 'calm and professional')",
+        },
+        style_inspiration_url: {
+          type: "string",
+          description: "URL of a website the birth worker admires the look of",
         },
       },
     },
@@ -129,6 +192,44 @@ export const CHAT_TOOLS: ClaudeToolDefinition[] = [
     },
   },
   {
+    name: "update_bio_depth",
+    description:
+      "Save biographical depth fields collected during the guided story elicitation in Step 4. These fields feed into richer bio generation.",
+    input_schema: {
+      type: "object",
+      properties: {
+        bio_previous_career: {
+          type: "string",
+          description: "What the birth worker did before entering birth work",
+        },
+        bio_origin_story: {
+          type: "string",
+          description:
+            "The moment or experience that led them to become a birth worker",
+        },
+        training_year: {
+          type: "string",
+          description: "Year they completed their training (e.g., '2019')",
+        },
+        additional_training: {
+          type: "array",
+          items: { type: "string" },
+          description:
+            "Additional training or CPD completed (e.g., 'spinning babies', 'aromatherapy', 'rebozo')",
+        },
+        client_perception: {
+          type: "string",
+          description: "What clients most often say about the birth worker",
+        },
+        signature_story: {
+          type: "string",
+          description:
+            "A memorable birth or family experience (anonymised) that stayed with them",
+        },
+      },
+    },
+  },
+  {
     name: "update_contact",
     description:
       "Save or update contact information, social media links, and professional accreditation.",
@@ -165,6 +266,10 @@ export const CHAT_TOOLS: ClaudeToolDefinition[] = [
         training_provider: {
           type: "string",
           description: "Name of the training organisation or programme",
+        },
+        training_year: {
+          type: "string",
+          description: "Year they completed their training (e.g., '2019')",
         },
       },
     },
@@ -272,6 +377,9 @@ export function mapToolCallToSpecUpdate(
       if (typeof toolArgs.doula_name === "string") {
         update.doula_name = toolArgs.doula_name;
       }
+      if (typeof toolArgs.primary_location === "string") {
+        update.primary_location = toolArgs.primary_location;
+      }
       if (typeof toolArgs.service_area === "string") {
         update.service_area = toolArgs.service_area;
       }
@@ -289,8 +397,26 @@ export function mapToolCallToSpecUpdate(
       if (typeof toolArgs.palette === "string") {
         update.palette = toolArgs.palette as PaletteOption;
       }
+      if (
+        typeof toolArgs.custom_colours === "object" &&
+        toolArgs.custom_colours !== null
+      ) {
+        update.custom_colours = toolArgs.custom_colours as CustomColours;
+      }
       if (typeof toolArgs.typography === "string") {
         update.typography = toolArgs.typography as TypographyOption;
+      }
+      if (typeof toolArgs.font_heading === "string") {
+        update.font_heading = toolArgs.font_heading;
+      }
+      if (typeof toolArgs.font_body === "string") {
+        update.font_body = toolArgs.font_body;
+      }
+      if (typeof toolArgs.brand_feeling === "string") {
+        update.brand_feeling = toolArgs.brand_feeling;
+      }
+      if (typeof toolArgs.style_inspiration_url === "string") {
+        update.style_inspiration_url = toolArgs.style_inspiration_url;
       }
       return Object.keys(update).length > 0 ? update : null;
     }
@@ -311,6 +437,29 @@ export function mapToolCallToSpecUpdate(
       }
       if (typeof toolArgs.faq_enabled === "boolean") {
         update.faq_enabled = toolArgs.faq_enabled;
+      }
+      return Object.keys(update).length > 0 ? update : null;
+    }
+
+    case "update_bio_depth": {
+      const update: Partial<SiteSpec> = {};
+      if (typeof toolArgs.bio_previous_career === "string") {
+        update.bio_previous_career = toolArgs.bio_previous_career;
+      }
+      if (typeof toolArgs.bio_origin_story === "string") {
+        update.bio_origin_story = toolArgs.bio_origin_story;
+      }
+      if (typeof toolArgs.training_year === "string") {
+        update.training_year = toolArgs.training_year;
+      }
+      if (Array.isArray(toolArgs.additional_training)) {
+        update.additional_training = toolArgs.additional_training as string[];
+      }
+      if (typeof toolArgs.client_perception === "string") {
+        update.client_perception = toolArgs.client_perception;
+      }
+      if (typeof toolArgs.signature_story === "string") {
+        update.signature_story = toolArgs.signature_story;
       }
       return Object.keys(update).length > 0 ? update : null;
     }
@@ -337,6 +486,9 @@ export function mapToolCallToSpecUpdate(
       }
       if (typeof toolArgs.training_provider === "string") {
         update.training_provider = toolArgs.training_provider;
+      }
+      if (typeof toolArgs.training_year === "string") {
+        update.training_year = toolArgs.training_year;
       }
       return Object.keys(update).length > 0 ? update : null;
     }

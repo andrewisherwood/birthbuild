@@ -47,12 +47,20 @@ export function BusinessDetailsTab({
           />
 
           <Input
+            label="Primary Location"
+            value={siteSpec.primary_location ?? ""}
+            onChange={(value) => onFieldChange({ primary_location: value })}
+            placeholder="e.g. Brighton"
+            helperText="Where you are based — your home town or city"
+          />
+
+          <Input
             label="Service Area"
             value={siteSpec.service_area ?? ""}
             onChange={(value) => onFieldChange({ service_area: value })}
             required
-            placeholder="e.g. Greater Manchester, North West England"
-            helperText="The area you cover — helps with local SEO"
+            placeholder="e.g. Brighton, Hove, Lewes, Shoreham"
+            helperText="All the areas you cover, comma-separated — helps with local SEO"
           />
         </div>
       </Card>

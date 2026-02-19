@@ -7,6 +7,10 @@ export interface ServiceItem {
   title: string;
   description: string;
   price: string;
+  birth_types?: string[];
+  format?: string;
+  programme?: string;
+  experience_level?: string;
 }
 
 export interface SocialLinks {
@@ -30,6 +34,11 @@ export interface CustomColours {
   accent: string;
   text: string;
   cta: string;
+  background_description?: string;
+  primary_description?: string;
+  accent_description?: string;
+  text_description?: string;
+  cta_description?: string;
 }
 
 export type SiteSpecStatus = "draft" | "building" | "preview" | "live" | "error";
@@ -99,6 +108,7 @@ export interface SiteSpec {
   doula_name: string | null;
   tagline: string | null;
   service_area: string | null;
+  primary_location: string | null;
   services: ServiceItem[];
 
   // Contact
@@ -110,6 +120,12 @@ export interface SiteSpec {
   // Content
   bio: string | null;
   philosophy: string | null;
+  bio_previous_career: string | null;
+  bio_origin_story: string | null;
+  training_year: string | null;
+  additional_training: string[];
+  client_perception: string | null;
+  signature_story: string | null;
   testimonials: Testimonial[];
   faq_enabled: boolean;
   blog_enabled: boolean;
@@ -121,6 +137,8 @@ export interface SiteSpec {
   typography: TypographyOption;
   font_heading: string | null;
   font_body: string | null;
+  brand_feeling: string | null;
+  style_inspiration_url: string | null;
 
   // Advanced design overrides (null = use base fields)
   design: DesignConfig | null;

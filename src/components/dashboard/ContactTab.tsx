@@ -117,6 +117,14 @@ export function ContactTab({ siteSpec, onFieldChange }: ContactTabProps) {
             placeholder="e.g. Developing Doulas, Nurturing Birth"
             helperText="Your doula training organisation"
           />
+
+          <Input
+            label="Training Year"
+            value={siteSpec.training_year ?? ""}
+            onChange={(value) => onFieldChange({ training_year: value })}
+            placeholder="e.g. 2019"
+            helperText="When you completed your training"
+          />
         </div>
       </Card>
     </div>

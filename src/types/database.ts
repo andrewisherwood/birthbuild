@@ -73,5 +73,7 @@ export interface StudentOverview {
     deploy_url: string | null;
     preview_url: string | null;
     completion_percent: number;
+    density_score: number;
+    density_level: string;
   } | null;
 }

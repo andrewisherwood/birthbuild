@@ -90,6 +90,97 @@ export async function getAccessTokenDirect(): Promise<string | null> {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Storage bypass helpers (photos bucket is public for reads, auth for writes)
+// ---------------------------------------------------------------------------
+
+/**
+ * Upload a file to Supabase Storage via raw fetch, bypassing the SDK auth lock.
+ */
+export async function uploadStorageBypass(
+  bucket: string,
+  path: string,
+  file: File,
+  options?: { cacheControl?: string; upsert?: boolean },
+): Promise<{ error: string | null }> {
+  const accessToken = await getAccessTokenDirect();
+  if (!accessToken) {
+    return { error: "Your session has expired. Please sign in again." };
+  }
+
+  const url = `${SUPABASE_URL}/storage/v1/object/${bucket}/${path}`;
+
+  try {
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        apikey: SUPABASE_ANON_KEY,
+        ...(options?.cacheControl ? { "cache-control": options.cacheControl } : {}),
+        ...(options?.upsert ? { "x-upsert": "true" } : {}),
+      },
+      body: file,
+    });
+
+    if (!response.ok) {
+      const text = await response.text().catch(() => "");
+      return { error: text || `Upload failed: HTTP ${response.status}` };
+    }
+
+    return { error: null };
+  } catch (err: unknown) {
+    const detail = err instanceof Error ? err.message : "Network error";
+    return { error: `Upload failed: ${detail}` };
+  }
+}
+
+/**
+ * Remove files from Supabase Storage via raw fetch, bypassing the SDK auth lock.
+ */
+export async function removeStorageBypass(
+  bucket: string,
+  paths: string[],
+): Promise<{ error: string | null }> {
+  const accessToken = await getAccessTokenDirect();
+  if (!accessToken) {
+    return { error: "Your session has expired. Please sign in again." };
+  }
+
+  const url = `${SUPABASE_URL}/storage/v1/object/${bucket}`;
+
+  try {
+    const response = await fetch(url, {
+      method: "DELETE",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${accessToken}`,
+        apikey: SUPABASE_ANON_KEY,
+      },
+      body: JSON.stringify({ prefixes: paths }),
+    });
+
+    if (!response.ok) {
+      return { error: `Delete failed: HTTP ${response.status}` };
+    }
+
+    return { error: null };
+  } catch {
+    return { error: "Network error during delete." };
+  }
+}
+
+/**
+ * Build a public URL for a file in a public Supabase Storage bucket.
+ * No auth needed — the photos bucket is public (migration 007).
+ */
+export function getPublicStorageUrl(bucket: string, path: string): string {
+  return `${SUPABASE_URL}/storage/v1/object/public/${bucket}/${path}`;
+}
+
+// ---------------------------------------------------------------------------
+// Edge Function bypass
+// ---------------------------------------------------------------------------
+
 /**
  * Invoke a Supabase Edge Function via raw fetch, completely bypassing the SDK.
  */

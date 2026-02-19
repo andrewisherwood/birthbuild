@@ -1,4 +1,5 @@
 import { Card } from "@/components/ui/Card";
+import { Input } from "@/components/ui/Input";
 import { TextareaField } from "@/components/dashboard/TextareaField";
 import { TestimonialEditor } from "@/components/dashboard/TestimonialEditor";
 import { ToggleSwitch } from "@/components/dashboard/ToggleSwitch";
@@ -52,6 +53,76 @@ export function ContentTab({ siteSpec, onFieldChange }: ContentTabProps) {
             showAskAi
             siteSpec={siteSpec}
             onAiGenerated={(text) => onFieldChange({ tagline: text })}
+          />
+        </div>
+      </Card>
+
+      <Card title="Your Story">
+        <p className="mb-4 text-sm text-gray-500">
+          These details help us generate a richer, more personal bio for your About page.
+          Fill in as much or as little as you like.
+        </p>
+        <div className="space-y-4">
+          <TextareaField
+            label="Previous Career"
+            value={siteSpec.bio_previous_career ?? ""}
+            onChange={(value) => onFieldChange({ bio_previous_career: value })}
+            rows={2}
+            placeholder="What did you do before becoming a birth worker?"
+            helperText="Helps visitors connect with your journey"
+          />
+
+          <TextareaField
+            label="Origin Story"
+            value={siteSpec.bio_origin_story ?? ""}
+            onChange={(value) => onFieldChange({ bio_origin_story: value })}
+            rows={3}
+            placeholder="What made you decide to train as a doula? Was there a moment that sparked it?"
+            helperText="This becomes the heart of your About page"
+            showAskAi
+            siteSpec={siteSpec}
+            onAiGenerated={(text) => onFieldChange({ bio_origin_story: text })}
+          />
+
+          <Input
+            label="Training Year"
+            value={siteSpec.training_year ?? ""}
+            onChange={(value) => onFieldChange({ training_year: value })}
+            placeholder="e.g. 2019"
+            helperText="When you completed your doula training"
+          />
+
+          <Input
+            label="Additional Training"
+            value={(siteSpec.additional_training ?? []).join(", ")}
+            onChange={(value) =>
+              onFieldChange({
+                additional_training: value
+                  .split(",")
+                  .map((s) => s.trim())
+                  .filter(Boolean),
+              })
+            }
+            placeholder="e.g. Spinning Babies, Aromatherapy, Rebozo"
+            helperText="Comma-separated list of additional qualifications or CPD"
+          />
+
+          <TextareaField
+            label="Client Perception"
+            value={siteSpec.client_perception ?? ""}
+            onChange={(value) => onFieldChange({ client_perception: value })}
+            rows={2}
+            placeholder="What do your clients say about you most often?"
+            helperText="Not a testimonial — just the thing that keeps coming up"
+          />
+
+          <TextareaField
+            label="Signature Story"
+            value={siteSpec.signature_story ?? ""}
+            onChange={(value) => onFieldChange({ signature_story: value })}
+            rows={3}
+            placeholder="A birth or family that stayed with you (no names or details needed)"
+            helperText="Optional — makes your About page feel really human"
           />
         </div>
       </Card>

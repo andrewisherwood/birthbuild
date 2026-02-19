@@ -31,10 +31,21 @@ export function generateHomePage(
   const footer = generateFooter(spec);
 
   // Hero section
+  const heroPhoto = photos.find((p) => p.purpose === "hero");
   const heroCta = spec.pages.includes("contact")
-    ? `<a href="contact.html" class="btn">Get in Touch</a>`
+    ? `<a href="contact.html" class="btn btn--hero">Get in Touch</a>`
     : "";
-  const heroHtml = `<section class="hero">
+  const heroHtml = heroPhoto
+    ? `<section class="hero">
+    <img src="${escapeHtml(heroPhoto.publicUrl)}" alt="${escapeHtml(heroPhoto.altText)}" class="hero__bg" loading="eager" />
+    <div class="hero__overlay"></div>
+    <div class="hero__content">
+      <h1>${businessName}</h1>
+      ${tagline ? `<p class="hero__tagline">${tagline}</p>` : ""}
+      ${heroCta}
+    </div>
+  </section>`
+    : `<section class="hero hero--text-only">
     <div class="hero-inner">
       <h1>${businessName}</h1>
       ${tagline ? `<p class="tagline">${tagline}</p>` : ""}
@@ -46,16 +57,28 @@ export function generateHomePage(
   let servicesHtml = "";
   if (spec.services.length > 0) {
     const previewServices = spec.services.slice(0, 3);
+    const galleryPhotos = photos.filter((p) => p.purpose === "gallery");
     const serviceCards = previewServices
-      .map(
-        (svc) =>
-          `<div class="card">
-          <h3>${escapeHtml(svc.title)}</h3>
-          <p>${escapeHtml(svc.description)}</p>
-          <span class="price">${escapeHtml(svc.price)}</span>
-          ${spec.pages.includes("contact") ? `<a href="contact.html" class="btn btn--outline">Enquire</a>` : ""}
-        </div>`,
-      )
+      .map((svc, i) => {
+        const photo = galleryPhotos[i];
+        const imageHtml = photo
+          ? `<div class="card__image">
+            <img src="${escapeHtml(photo.publicUrl)}" alt="${escapeHtml(photo.altText)}" loading="lazy" />
+          </div>`
+          : "";
+        const enquireLink = spec.pages.includes("contact")
+          ? `<a href="contact.html" class="card__link">Enquire &rarr;</a>`
+          : "";
+        return `<div class="card${photo ? " card--service" : ""}">
+          ${imageHtml}
+          <div class="${photo ? "card__body" : ""}">
+            <h3>${escapeHtml(svc.title)}</h3>
+            <p>${escapeHtml(svc.description)}</p>
+            <span class="price">${escapeHtml(svc.price)}</span>
+            ${enquireLink}
+          </div>
+        </div>`;
+      })
       .join("\n      ");
 
     const viewAllLink =

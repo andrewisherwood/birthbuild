@@ -1,58 +1,67 @@
+import { calculateDensityScore } from "@/lib/density-score";
+import type { DensityLevel } from "@/lib/density-score";
 import type { SiteSpec } from "@/types/site-spec";
 
 interface ProgressIndicatorProps {
   siteSpec: SiteSpec;
   className?: string;
+  showSuggestions?: boolean;
 }
 
-function countFilledFields(siteSpec: SiteSpec): number {
-  let filled = 0;
+const LEVEL_COLOURS: Record<DensityLevel, string> = {
+  low: "#dc2626",
+  medium: "#d97706",
+  high: "#16a34a",
+  excellent: "#165e40",
+};
 
-  // Required fields (4)
-  if (siteSpec.business_name) filled++;
-  if (siteSpec.doula_name) filled++;
-  if (siteSpec.service_area) filled++;
-  if (siteSpec.email) filled++;
-
-  // Optional scored fields (7)
-  if (siteSpec.tagline) filled++;
-  if (siteSpec.bio) filled++;
-  if (siteSpec.services && siteSpec.services.length > 0) filled++;
-  if (siteSpec.phone) filled++;
-  if (siteSpec.palette && siteSpec.palette !== "sage_sand") filled++;
-  if (siteSpec.style && siteSpec.style !== "modern") filled++;
-  if (siteSpec.typography && siteSpec.typography !== "modern") filled++;
-
-  return filled;
-}
-
-const TOTAL_FIELDS = 11;
+const LEVEL_LABELS: Record<DensityLevel, string> = {
+  low: "Getting started",
+  medium: "Good progress",
+  high: "Looking great",
+  excellent: "Excellent detail",
+};
 
 export function ProgressIndicator({
   siteSpec,
   className = "",
+  showSuggestions = false,
 }: ProgressIndicatorProps) {
-  const filled = countFilledFields(siteSpec);
-  const percentage = Math.round((filled / TOTAL_FIELDS) * 100);
+  const result = calculateDensityScore(siteSpec);
+  const colour = LEVEL_COLOURS[result.level];
 
   return (
-    <div className={`flex items-center gap-3 ${className}`}>
-      <div
-        className="h-2.5 flex-1 overflow-hidden rounded-full bg-gray-200"
-        role="progressbar"
-        aria-valuenow={percentage}
-        aria-valuemin={0}
-        aria-valuemax={100}
-        aria-label={`Site completion: ${percentage}%`}
-      >
+    <div className={className}>
+      <div className="flex items-center gap-3">
         <div
-          className="h-full rounded-full transition-all duration-300"
-          style={{ width: `${percentage}%`, backgroundColor: "#165e40" }}
-        />
+          className="h-2.5 flex-1 overflow-hidden rounded-full bg-gray-200"
+          role="progressbar"
+          aria-valuenow={result.percentage}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-label={`Site density: ${result.percentage}% — ${LEVEL_LABELS[result.level]}`}
+        >
+          <div
+            className="h-full rounded-full transition-all duration-300"
+            style={{ width: `${result.percentage}%`, backgroundColor: colour }}
+          />
+        </div>
+        <span className="text-sm font-medium text-gray-600">
+          {result.percentage}%
+        </span>
       </div>
-      <span className="text-sm font-medium text-gray-600">
-        {percentage}%
-      </span>
+      <p className="mt-1 text-xs text-gray-500">
+        {LEVEL_LABELS[result.level]} ({result.totalScore}/25)
+      </p>
+      {showSuggestions && result.suggestions.length > 0 && (
+        <ul className="mt-2 space-y-1">
+          {result.suggestions.map((suggestion) => (
+            <li key={suggestion} className="text-xs text-gray-500">
+              &bull; {suggestion}
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }

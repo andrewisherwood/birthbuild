@@ -1,6 +1,11 @@
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/hooks/useAuth";
+import {
+  uploadStorageBypass,
+  removeStorageBypass,
+  getPublicStorageUrl,
+} from "@/lib/auth-bypass";
 import type { Photo } from "@/types/database";
 
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp"];
@@ -41,27 +46,14 @@ export function usePhotoUpload(siteSpecId: string | null): UsePhotoUploadReturn 
     return () => clearTimeout(id);
   }, [loading]);
 
-  // Generate signed URLs for a list of storage paths (private bucket)
-  const generateSignedUrls = useCallback(
-    async (paths: string[]): Promise<Record<string, string>> => {
-      if (paths.length === 0) return {};
-
-      const { data, error: signError } = await supabase.storage
-        .from("photos")
-        .createSignedUrls(paths, 3600); // 1 hour expiry
-
-      if (signError || !data) return {};
-
-      const urlMap: Record<string, string> = {};
-      for (const item of data) {
-        if (item.signedUrl) {
-          urlMap[item.path ?? ""] = item.signedUrl;
-        }
-      }
-      return urlMap;
-    },
-    [],
-  );
+  // Build public URL map from photo list (bucket is public — no signed URLs needed)
+  const buildUrlMap = useCallback((photoList: Photo[]): Record<string, string> => {
+    const urlMap: Record<string, string> = {};
+    for (const p of photoList) {
+      urlMap[p.storage_path] = getPublicStorageUrl("photos", p.storage_path);
+    }
+    return urlMap;
+  }, []);
 
   // Fetch photos for this site spec
   useEffect(() => {
@@ -93,13 +85,7 @@ export function usePhotoUpload(siteSpecId: string | null): UsePhotoUploadReturn 
 
         const fetchedPhotos = (data as Photo[]) ?? [];
         setPhotos(fetchedPhotos);
-
-        // Pre-generate signed URLs for all photos
-        const paths = fetchedPhotos.map((p) => p.storage_path);
-        const urls = await generateSignedUrls(paths);
-        if (mounted) {
-          setPhotoUrls(urls);
-        }
+        setPhotoUrls(buildUrlMap(fetchedPhotos));
       } catch {
         if (mounted) {
           setError("Unable to load photos. Please try again.");
@@ -116,12 +102,12 @@ export function usePhotoUpload(siteSpecId: string | null): UsePhotoUploadReturn 
     return () => {
       mounted = false;
     };
-  }, [siteSpecId, generateSignedUrls]);
+  }, [siteSpecId, buildUrlMap]);
 
-  // Sync fallback: returns cached signed URL or empty string
+  // Public URL helper (bucket is public — no auth needed)
   const getPublicUrl = useCallback(
     (storagePath: string): string => {
-      return photoUrls[storagePath] ?? "";
+      return photoUrls[storagePath] ?? getPublicStorageUrl("photos", storagePath);
     },
     [photoUrls],
   );
@@ -156,13 +142,13 @@ export function usePhotoUpload(siteSpecId: string | null): UsePhotoUploadReturn 
       }
       const storagePath = `photos/${userId}/${purpose}-${Date.now()}.${ext}`;
 
-      // Upload to Supabase Storage
-      const { error: uploadError } = await supabase.storage
-        .from("photos")
-        .upload(storagePath, file, {
-          cacheControl: "3600",
-          upsert: false,
-        });
+      // Upload to Supabase Storage (bypass SDK auth lock)
+      const { error: uploadError } = await uploadStorageBypass(
+        "photos",
+        storagePath,
+        file,
+        { cacheControl: "3600", upsert: false },
+      );
 
       if (uploadError) {
         console.error("Photo upload failed:", uploadError);
@@ -187,7 +173,7 @@ export function usePhotoUpload(siteSpecId: string | null): UsePhotoUploadReturn 
       if (insertError) {
         console.error("Photo record insert failed:", insertError);
         // Clean up the uploaded file
-        await supabase.storage.from("photos").remove([storagePath]);
+        await removeStorageBypass("photos", [storagePath]);
         setError("Unable to save photo record. Please try again.");
         setUploading(false);
         return null;
@@ -196,14 +182,14 @@ export function usePhotoUpload(siteSpecId: string | null): UsePhotoUploadReturn 
       const newPhoto = photoRow as Photo;
       setPhotos((prev) => [...prev, newPhoto]);
 
-      // Generate a signed URL for the newly uploaded photo
-      const newUrls = await generateSignedUrls([storagePath]);
-      setPhotoUrls((prev) => ({ ...prev, ...newUrls }));
+      // Add public URL for the newly uploaded photo
+      const publicUrl = getPublicStorageUrl("photos", storagePath);
+      setPhotoUrls((prev) => ({ ...prev, [storagePath]: publicUrl }));
 
       setUploading(false);
       return newPhoto;
     },
-    [userId, siteSpecId, photos.length, generateSignedUrls],
+    [userId, siteSpecId, photos.length],
   );
 
   const deletePhoto = useCallback(
@@ -227,8 +213,8 @@ export function usePhotoUpload(siteSpecId: string | null): UsePhotoUploadReturn 
         return;
       }
 
-      // Remove from storage (best-effort)
-      await supabase.storage.from("photos").remove([storagePath]);
+      // Remove from storage (best-effort, bypass SDK auth lock)
+      await removeStorageBypass("photos", [storagePath]);
 
       setPhotos((prev) => prev.filter((p) => p.id !== photoId));
     },

@@ -96,8 +96,15 @@ function buildSystemPrompt(page: string, spec: any, designSystem: DesignSystemIn
   const bookingUrl = spec.booking_url ?? "";
   const doulaUk = spec.doula_uk ?? false;
   const trainingProvider = spec.training_provider ?? "";
+  const trainingYear = spec.training_year ?? "";
   const primaryKeyword = spec.primary_keyword ?? "";
   const subdomain = spec.subdomain_slug ?? "example";
+  const primaryLocation = spec.primary_location ?? "";
+  const bioPreviousCareer = spec.bio_previous_career ?? "";
+  const bioOriginStory = spec.bio_origin_story ?? "";
+  const additionalTraining = spec.additional_training ?? [];
+  const clientPerception = spec.client_perception ?? "";
+  const signatureStory = spec.signature_story ?? "";
 
   const photosDesc = photos.length > 0
     ? photos.map((p) => `- ${p.purpose}: ${p.publicUrl} (alt: "${p.altText}")`).join("\n")
@@ -120,29 +127,39 @@ function buildSystemPrompt(page: string, spec: any, designSystem: DesignSystemIn
   switch (page) {
     case "home":
       pageSpecific = `## Home Page Requirements
-- Hero section with business name, tagline, and a compelling CTA button linking to contact.html
-- Services overview showing the first 3 services as cards
+- Hero section: MUST use full-width background image with text overlay. Use the hero photo as an <img> with object-fit:cover positioned absolutely. Add gradient overlay div for readability. h1 + tagline + CTA in white on top. Use .hero, .hero__bg, .hero__overlay, .hero__content, .hero__tagline, .btn--hero classes. If no hero photo is available, use a text-only hero with .hero--text-only class and brand colours.
+- Services overview showing the first 3 services as cards. Each card MUST include a relevant image at the top if photos are available. Use .card--service wrapper with .card__image div (img inside) and .card__body div for text. Use .card__link for enquiry links. Fall back to plain .card if no images.
 - Featured testimonial (first one, if available)
 - About preview with a brief teaser linking to about.html
 - Final CTA section encouraging visitors to get in touch
 - Schema.org LocalBusiness JSON-LD in a <script type="application/ld+json"> block with:
   - @type: LocalBusiness
   - name: "${businessName}"
-  - areaServed: "${serviceArea}"
+  - areaServed: "${primaryLocation ? primaryLocation + ", " : ""}${serviceArea}"
   - url: "https://${subdomain}.birthbuild.com"
   ${email ? `- email: "${email}"` : ""}
-  ${phone ? `- telephone: "${phone}"` : ""}`;
+  ${phone ? `- telephone: "${phone}"` : ""}
+  ${trainingProvider ? `- hasCredential: "${trainingProvider}${trainingYear ? ` (${trainingYear})` : ""}"` : ""}`;
       break;
 
-    case "about":
+    case "about": {
+      const aboutExtras: string[] = [];
+      if (bioPreviousCareer) aboutExtras.push(`- Reference their previous career: ${bioPreviousCareer}`);
+      if (bioOriginStory) aboutExtras.push(`- Weave in their origin story: ${bioOriginStory}`);
+      if (additionalTraining.length > 0) aboutExtras.push(`- Mention additional qualifications: ${additionalTraining.join(", ")}`);
+      if (clientPerception) aboutExtras.push(`- Include what clients say about them: ${clientPerception}`);
+      if (signatureStory) aboutExtras.push(`- If space allows, reference this personal story: ${signatureStory}`);
+      if (trainingYear) aboutExtras.push(`- Training year: ${trainingYear}`);
+      const aboutExtrasStr = aboutExtras.length > 0 ? "\n" + aboutExtras.join("\n") : "";
       pageSpecific = `## About Page Requirements
 - Hero section with the page title
 - Bio section with the birth worker's biography
 - Philosophy section with their approach statement
-- Qualifications section${doulaUk ? " (mention Doula UK membership)" : ""}${trainingProvider ? ` (trained with: ${trainingProvider})` : ""}
+- Qualifications section${doulaUk ? " (mention Doula UK membership)" : ""}${trainingProvider ? ` (trained with: ${trainingProvider})` : ""}${aboutExtrasStr}
 - CTA section encouraging visitors to get in touch
 - If a headshot photo is available, display it prominently`;
       break;
+    }
 
     case "services":
       pageSpecific = `## Services Page Requirements
@@ -182,6 +199,17 @@ function buildSystemPrompt(page: string, spec: any, designSystem: DesignSystemIn
 
   return `You are a senior web designer generating a single HTML page for a birth worker's professional website.
 
+## MANDATORY: DESIGN SYSTEM FIDELITY
+
+The CSS design system provided below contains the client's confirmed brand colours and fonts. These are non-negotiable.
+
+RULES:
+1. Inline the provided CSS design system EXACTLY as given in the <style> tag. Do not modify any hex values or font names.
+2. Do NOT add additional colour values or font declarations that conflict with the design system.
+3. Do NOT use hardcoded hex colours in inline styles or additional <style> blocks. Use the CSS custom properties (var(--colour-*)) defined in the design system.
+4. Do NOT substitute fonts. The design system specifies the exact heading and body fonts. Use them.
+5. If you feel the urge to use sage green, cream, or DM Serif Display — STOP. Check the design system CSS. Use what it specifies.
+
 ## Site Identity
 - Business name: "${businessName}"
 - Doula/birth worker name: "${doulaName}"
@@ -202,8 +230,8 @@ ${testimonialsDesc}
 ## Photos
 ${photosDesc}
 
-## Design System CSS (already generated — inline this in <style>)
-The CSS design system has already been generated. You MUST inline it exactly in the <style> tag of your page.
+## Design System CSS (already generated — inline EXACTLY in <style>)
+The CSS design system has already been generated with the client's exact brand colours and fonts. You MUST inline it character-for-character in the <style> tag of your page. Do NOT modify any values. Do NOT add conflicting colour or font declarations.
 
 ## Navigation HTML (already generated — use verbatim)
 The navigation header has been generated. Insert it verbatim after <body>.
@@ -242,7 +270,9 @@ Generate a complete \`<!DOCTYPE html>\` page with:
 - No medical claims or language that could be construed as medical advice
 - No JavaScript (except JSON-LD on the home page)
 - Mobile-first responsive (the CSS handles this)
-- Creative, professional, and warm — make this site stand out`;
+- Creative, professional, and warm — make this site stand out
+- CRITICAL: Do NOT add any inline styles with hardcoded colours. Use var(--colour-primary), var(--colour-accent), etc. from the design system CSS.
+- CRITICAL: Do NOT override the design system fonts with different font families.`;
 }
 
 // ---------------------------------------------------------------------------

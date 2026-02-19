@@ -206,6 +206,23 @@ export function generateNav(
 }
 
 // ---------------------------------------------------------------------------
+// Social icon SVGs
+// ---------------------------------------------------------------------------
+
+const SOCIAL_ICONS: Record<string, string> = {
+  facebook: `<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>`,
+  instagram: `<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zM12 0C8.741 0 8.333.014 7.053.072 2.695.272.273 2.69.073 7.052.014 8.333 0 8.741 0 12c0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98C8.333 23.986 8.741 24 12 24c3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98C15.668.014 15.259 0 12 0zm0 5.838a6.162 6.162 0 100 12.324 6.162 6.162 0 000-12.324zM12 16a4 4 0 110-8 4 4 0 010 8zm6.406-11.845a1.44 1.44 0 100 2.881 1.44 1.44 0 000-2.881z"/></svg>`,
+  tiktok: `<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12.525.02c1.31-.02 2.61-.01 3.91-.02.08 1.53.63 3.09 1.75 4.17 1.12 1.11 2.7 1.62 4.24 1.79v4.03c-1.44-.05-2.89-.35-4.2-.97-.57-.26-1.1-.59-1.62-.93-.01 2.92.01 5.84-.02 8.75-.08 1.4-.54 2.79-1.35 3.94-1.31 1.92-3.58 3.17-5.91 3.21-1.43.08-2.86-.31-4.08-1.03-2.02-1.19-3.44-3.37-3.65-5.71-.02-.5-.03-1-.01-1.49.18-1.9 1.12-3.72 2.58-4.96 1.66-1.44 3.98-2.13 6.15-1.72.02 1.48-.04 2.96-.04 4.44-.99-.32-2.15-.23-3.02.37-.63.41-1.11 1.04-1.36 1.75-.21.51-.15 1.07-.14 1.61.24 1.64 1.82 3.02 3.5 2.87 1.12-.01 2.19-.66 2.77-1.61.19-.33.4-.67.41-1.06.1-1.79.06-3.57.07-5.36.01-4.03-.01-8.05.02-12.07z"/></svg>`,
+  linkedin: `<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 01-2.063-2.065 2.064 2.064 0 112.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg>`,
+  twitter: `<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>`,
+};
+
+function socialIconSvg(platform: string): string {
+  return SOCIAL_ICONS[platform.toLowerCase()] ??
+    `<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm-1 17.5v-7l6 3.5-6 3.5z"/></svg>`;
+}
+
+// ---------------------------------------------------------------------------
 // Footer generation
 // ---------------------------------------------------------------------------
 
@@ -220,7 +237,7 @@ export function generateFooter(spec: SiteSpec): string {
           ${validLinks
             .map(
               (link) =>
-                `<a href="${escapeHtml(link.url)}" target="_blank" rel="noopener noreferrer" aria-label="${escapeHtml(link.platform)}">${escapeHtml(link.platform)}</a>`,
+                `<a href="${escapeHtml(link.url)}" target="_blank" rel="noopener noreferrer" aria-label="${escapeHtml(link.platform)}">${socialIconSvg(link.platform)}</a>`,
             )
             .join("\n          ")}
         </div>`
@@ -391,14 +408,51 @@ export function generateCss(
     .section-title { font-size: var(--h2-size); margin-bottom: var(--gap); }
     .section-subtitle { font-size: 1.1rem; color: var(--colour-text); opacity: 0.8; margin-bottom: 2rem; }
 
-    /* Hero */
-    .hero { padding: var(--hero-padding); text-align: center; }
-    .hero-inner { max-width: var(--max-width); margin: 0 auto; }
-    .hero h1 { font-size: var(--h1-size); margin-bottom: 1rem; }
-    .hero .tagline { font-size: var(--tagline-size); opacity: 0.85; margin-bottom: 2rem; max-width: 600px; margin-left: auto; margin-right: auto; }
+    /* Hero (image overlay) */
+    .hero {
+      position: relative; min-height: 85vh;
+      display: flex; align-items: center; justify-content: center;
+      overflow: hidden;
+    }
+    .hero__bg {
+      position: absolute; inset: 0; width: 100%; height: 100%;
+      object-fit: cover; z-index: 0;
+    }
+    .hero__overlay {
+      position: absolute; inset: 0; z-index: 1;
+      background: linear-gradient(to bottom, rgba(0,0,0,0.55), rgba(0,0,0,0.15));
+    }
+    .hero__content {
+      position: relative; z-index: 2; text-align: center;
+      padding: 2rem 1.5rem; max-width: var(--max-width);
+    }
+    .hero__content h1 { font-size: var(--h1-size); margin-bottom: 1rem; color: #fff; }
+    .hero__tagline {
+      font-size: var(--tagline-size); color: #fff; font-weight: 300;
+      margin-bottom: 2rem; max-width: 600px; margin-left: auto; margin-right: auto;
+    }
+    .btn--hero {
+      background: var(--colour-cta); color: #fff; padding: 0.85rem 2.5rem;
+      font-size: 1.05rem; border-radius: var(--btn-radius); font-weight: 600;
+      text-decoration: none; display: inline-block;
+      box-shadow: 0 4px 14px rgba(0,0,0,0.25); transition: background 0.2s, color 0.2s, transform 0.2s;
+    }
+    .btn--hero:hover { background: #fff; color: var(--colour-cta); transform: translateY(-1px); opacity: 1; }
 
+    @media (max-width: 768px) {
+      .hero { min-height: 70vh; }
+    }
     @media (min-width: 769px) {
-      .hero h1 { font-size: calc(var(--h1-size) * 1.4); }
+      .hero__content h1 { font-size: calc(var(--h1-size) * 1.4); }
+    }
+
+    /* Hero (text-only fallback) */
+    .hero--text-only { padding: var(--hero-padding); text-align: center; min-height: auto; display: block; }
+    .hero--text-only .hero-inner { max-width: var(--max-width); margin: 0 auto; }
+    .hero--text-only h1 { font-size: var(--h1-size); margin-bottom: 1rem; }
+    .hero--text-only .tagline { font-size: var(--tagline-size); opacity: 0.85; margin-bottom: 2rem; max-width: 600px; margin-left: auto; margin-right: auto; }
+    @media (min-width: 769px) {
+      .hero--text-only h1 { font-size: calc(var(--h1-size) * 1.4); }
     }
 
     /* Buttons */
@@ -426,6 +480,18 @@ export function generateCss(
     .card h3 { margin-bottom: 0.75rem; font-size: var(--h3-size); }
     .card p { margin-bottom: 1rem; }
     .card .price { font-weight: 600; color: var(--colour-primary); margin-bottom: 1rem; display: block; }
+
+    /* Service cards with images */
+    .card--service { display: flex; flex-direction: column; overflow: hidden; padding: 0; }
+    .card__image { height: 200px; overflow: hidden; }
+    .card__image img { width: 100%; height: 100%; object-fit: cover; transition: transform 0.3s; }
+    .card--service:hover .card__image img { transform: scale(1.05); }
+    .card__body { padding: var(--card-padding); }
+    .card__link {
+      color: var(--colour-cta); text-decoration: none; font-weight: 600;
+      display: inline-block; margin-top: 0.5rem; transition: color 0.2s;
+    }
+    .card__link:hover { opacity: 0.85; }
 
     /* Testimonials */
     .testimonial {
@@ -480,9 +546,14 @@ export function generateCss(
       padding: 2rem 1.5rem; text-align: center;
     }
     .footer-inner { max-width: var(--max-width); margin: 0 auto; }
-    .footer-social { margin-bottom: 1rem; display: flex; justify-content: center; gap: 1rem; flex-wrap: wrap; }
-    .footer-social a { color: rgba(255,255,255,0.9); text-decoration: none; font-weight: 500; }
-    .footer-social a:hover { text-decoration: underline; }
+    .footer-social { margin-bottom: 1.5rem; display: flex; justify-content: center; gap: 0.75rem; flex-wrap: wrap; }
+    .footer-social a {
+      width: 44px; height: 44px; border-radius: 50%;
+      background: rgba(255,255,255,0.1); color: rgba(255,255,255,0.9);
+      display: flex; align-items: center; justify-content: center;
+      text-decoration: none; transition: background 0.2s, transform 0.2s;
+    }
+    .footer-social a:hover { background: rgba(255,255,255,0.25); transform: translateY(-2px); opacity: 1; }
     .footer-copyright { font-size: 0.9rem; margin-bottom: 0.25rem; }
     .footer-privacy { font-size: 0.8rem; opacity: 0.7; }
 

@@ -2,7 +2,7 @@
  * Invite API client — calls the invite Edge Function proxy.
  */
 
-import { invokeEdgeFunctionBypass } from "@/lib/auth-bypass";
+import { supabase } from "@/lib/supabase";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -27,16 +27,22 @@ export async function inviteStudents(
   emails: string[],
   sessionId: string,
 ): Promise<InviteResult[]> {
-  const { data, error } = await invokeEdgeFunctionBypass<InviteResponse>("invite", {
-    emails,
-    session_id: sessionId,
+  const { data, error } = await supabase.functions.invoke("invite", {
+    body: {
+      emails,
+      session_id: sessionId,
+    },
   });
 
   if (error) {
-    throw new Error(error);
+    const message =
+      typeof error === "object" && error !== null && "message" in error
+        ? (error as { message: string }).message
+        : "Something went wrong. Please try again.";
+    throw new Error(message);
   }
 
-  const response = data;
+  const response = data as InviteResponse | undefined;
 
   if (!response || !response.results) {
     throw new Error(

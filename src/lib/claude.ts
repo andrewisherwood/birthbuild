@@ -6,7 +6,7 @@
  * in the Edge Function. The client only sends messages.
  */
 
-import { invokeEdgeFunctionBypass } from "@/lib/auth-bypass";
+import { supabase } from "@/lib/supabase";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -61,15 +61,23 @@ interface SendDesignChatMessageParams {
 export async function sendChatMessage({
   messages,
 }: SendChatMessageParams): Promise<ClaudeResponse> {
-  const { data, error } = await invokeEdgeFunctionBypass<ClaudeResponse>("chat", {
-    messages,
+  const { data, error } = await supabase.functions.invoke("chat", {
+    body: {
+      messages,
+    },
   });
 
   if (error) {
-    throw new Error(error);
+    // Supabase functions.invoke wraps network / non-2xx errors
+    const message =
+      typeof error === "object" && error !== null && "message" in error
+        ? (error as { message: string }).message
+        : "Something went wrong. Please try again.";
+    throw new Error(message);
   }
 
-  const response = data;
+  // The Edge Function returns the Claude response JSON directly
+  const response = data as ClaudeResponse | undefined;
 
   if (!response || !response.content) {
     throw new Error("Received an empty response from the assistant. Please try again.");
@@ -86,16 +94,22 @@ export async function sendDesignChatMessage({
   messages,
   currentDesign,
 }: SendDesignChatMessageParams): Promise<ClaudeResponse> {
-  const { data, error } = await invokeEdgeFunctionBypass<ClaudeResponse>("design-chat", {
-    messages,
-    current_design: currentDesign,
+  const { data, error } = await supabase.functions.invoke("design-chat", {
+    body: {
+      messages,
+      current_design: currentDesign,
+    },
   });
 
   if (error) {
-    throw new Error(error);
+    const message =
+      typeof error === "object" && error !== null && "message" in error
+        ? (error as { message: string }).message
+        : "Something went wrong. Please try again.";
+    throw new Error(message);
   }
 
-  const response = data;
+  const response = data as ClaudeResponse | undefined;
 
   if (!response || !response.content) {
     throw new Error("Received an empty response from the assistant. Please try again.");

@@ -1,0 +1,73 @@
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>{{TITLE}}</title>
+<meta name="description" content="{{DESCRIPTION}}" />
+<link rel="canonical" href="{{CANONICAL_URL}}" />
+
+<!-- Open Graph -->
+<meta property="og:title" content="{{TITLE}}" />
+<meta property="og:description" content="{{DESCRIPTION}}" />
+<meta property="og:type" content="{{OG_TYPE}}" />
+<meta property="og:url" content="{{CANONICAL_URL}}" />
+<meta property="og:site_name" content="BirthBuild" />
+<meta property="og:locale" content="en_GB" />
+
+<!-- Twitter Card -->
+<meta name="twitter:card" content="summary" />
+<meta name="twitter:title" content="{{TITLE}}" />
+<meta name="twitter:description" content="{{DESCRIPTION}}" />
+
+<!-- Fonts -->
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link
+  href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;1,300;1,400&family=Outfit:wght@300;400;500;600&display=swap"
+  rel="stylesheet"
+/>
+
+<!-- Blog CSS -->
+<link rel="stylesheet" href="/blog/assets/blog.css" />
+
+<!-- Design system variables (shared with landing page) -->
+<style>
+  :root {
+    --sage: #5f7161;
+    --sage-light: #7a8f7c;
+    --sage-pale: #e8ede9;
+    --sand: #f5f0e8;
+    --sand-dark: #e8dfd3;
+    --cream: #faf8f4;
+    --warm-white: #fdfcfa;
+    --text: #2d2d2d;
+    --text-light: #5a5a5a;
+    --text-muted: #8a8a7e;
+    --blush: #c9928e;
+    --blush-light: #e8cfc4;
+    --earth: #6b4c3b;
+    --ocean: #3d6b7e;
+    --gold: #b8a088;
+    --font-display: 'Cormorant Garamond', Georgia, serif;
+    --font-body: 'Outfit', system-ui, sans-serif;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; font-size: 16px; }
+  body {
+    font-family: var(--font-body);
+    color: var(--text);
+    background: var(--cream);
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+  }
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    opacity: 0.025;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 9999;
+  }
+</style>
+
+<!-- Structured Data -->
+{{STRUCTURED_DATA}}

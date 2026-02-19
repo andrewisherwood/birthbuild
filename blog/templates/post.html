@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+{{HEAD}}
+</head>
+<body>
+{{NAV}}
+
+<header class="article-header">
+  <a href="/blog" class="article-back">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M19 12H5"/><path d="m12 19-7-7 7-7"/>
+    </svg>
+    Back to Blog
+  </a>
+  <div class="post-meta">
+    <span class="pill">{{CATEGORY_LABEL}}</span>
+    <span class="meta-separator">&middot;</span>
+    <span class="read-time">{{READ_TIME}} min read</span>
+  </div>
+  <h1>{{TITLE}}</h1>
+  <time class="article-date" datetime="{{DATE_ISO}}">{{DATE_FORMATTED}}</time>
+  <hr class="article-divider" />
+</header>
+
+<!-- Mobile TOC -->
+<div class="toc-mobile">
+  <button class="toc-toggle" aria-expanded="false" aria-controls="toc-mobile-list">
+    On this page
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+      <path d="m6 9 6 6 6-6"/>
+    </svg>
+  </button>
+  <ul class="toc-mobile-list" id="toc-mobile-list">
+    {{TOC_ITEMS}}
+  </ul>
+</div>
+
+<!-- Article body with sidebar TOC -->
+<div class="article-layout">
+  <aside class="toc-sidebar" aria-label="Table of contents">
+    <div class="toc-title">On this page</div>
+    <ul class="toc-list">
+      {{TOC_ITEMS}}
+    </ul>
+  </aside>
+
+  <article class="article-prose">
+    {{ARTICLE_CONTENT}}
+  </article>
+
+  <div><!-- right gutter --></div>
+</div>
+
+{{CTA_BANNER}}
+
+{{RELATED_POSTS}}
+
+{{FAQ_SECTION}}
+
+{{FOOTER}}
+
+<script>
+// TOC scroll tracking
+(function() {
+  var headings = document.querySelectorAll('.article-prose h2[id]');
+  var tocLinks = document.querySelectorAll('.toc-link');
+  if (!headings.length || !tocLinks.length) return;
+
+  var observer = new IntersectionObserver(function(entries) {
+    entries.forEach(function(entry) {
+      if (entry.isIntersecting) {
+        tocLinks.forEach(function(link) { link.classList.remove('active'); });
+        var active = document.querySelector('.toc-link[href="#' + entry.target.id + '"]');
+        if (active) active.classList.add('active');
+      }
+    });
+  }, { rootMargin: '-80px 0px -70% 0px', threshold: 0 });
+
+  headings.forEach(function(h) { observer.observe(h); });
+
+  // Smooth scroll for TOC links
+  document.querySelectorAll('.toc-link, .toc-mobile-list a').forEach(function(a) {
+    a.addEventListener('click', function(e) {
+      e.preventDefault();
+      var target = document.querySelector(this.getAttribute('href'));
+      if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  });
+})();
+
+// Mobile TOC toggle
+(function() {
+  var toggle = document.querySelector('.toc-toggle');
+  var list = document.querySelector('.toc-mobile-list');
+  if (!toggle || !list) return;
+  toggle.addEventListener('click', function() {
+    var isOpen = list.classList.toggle('open');
+    toggle.classList.toggle('open', isOpen);
+    toggle.setAttribute('aria-expanded', isOpen);
+  });
+})();
+</script>
+</body>
+</html>

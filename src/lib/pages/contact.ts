@@ -99,7 +99,7 @@ ${head}
   <main id="main">
     <section class="section">
       <div class="section-inner">
-        <h1 class="section-title">Get in Touch</h1>
+        <h1 class="section-title">Contact ${escapeHtml(spec.business_name ?? "Us")}${spec.service_area ? ` | ${escapeHtml(spec.service_area)}` : ""}</h1>
         <p class="section-subtitle">I'd love to hear from you. Fill in the form below or use any of the contact details provided.</p>
         <div class="about-grid">
           <div>

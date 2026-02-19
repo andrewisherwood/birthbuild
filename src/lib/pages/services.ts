@@ -10,6 +10,7 @@ import {
   generateNav,
   generateFooter,
 } from "@/lib/pages/shared";
+import { buildServiceSchemaArray, renderJsonLd } from "@/lib/schema-generators";
 
 export function generateServicesPage(
   spec: SiteSpec,
@@ -46,6 +47,14 @@ export function generateServicesPage(
   </section>`
     : "";
 
+  const entityH1 = spec.service_area
+    ? `Services | ${escapeHtml(spec.business_name ?? "Birth Worker")} in ${escapeHtml(spec.service_area)}`
+    : `Services | ${escapeHtml(spec.business_name ?? "Birth Worker")}`;
+
+  const serviceSchemaHtml = spec.services.length > 0
+    ? renderJsonLd(buildServiceSchemaArray(spec))
+    : "";
+
   return `<!DOCTYPE html>
 <html lang="en-GB">
 ${head}
@@ -54,7 +63,7 @@ ${head}
   <main id="main">
     <section class="section">
       <div class="section-inner">
-        <h1 class="section-title">Services</h1>
+        <h1 class="section-title">${entityH1}</h1>
         <p class="section-subtitle">Explore the support I offer to families${spec.service_area ? ` across ${escapeHtml(spec.service_area)}` : ""}.</p>
         <div class="cards">
           ${serviceCards}
@@ -64,6 +73,7 @@ ${head}
     ${ctaHtml}
   </main>
   ${footer}
+  ${serviceSchemaHtml}
 </body>
 </html>`;
 }

@@ -10,9 +10,12 @@ import {
   generateHead,
   generateNav,
   generateFooter,
-  getValidSocialLinks,
   type PhotoData,
 } from "@/lib/pages/shared";
+import {
+  buildLocalBusinessSchema,
+  renderJsonLd,
+} from "@/lib/schema-generators";
 
 export function generateHomePage(
   spec: SiteSpec,
@@ -22,6 +25,19 @@ export function generateHomePage(
   const businessName = spec.business_name ? escapeHtml(spec.business_name) : "My Doula Practice";
   const tagline = spec.tagline ? escapeHtml(spec.tagline) : "";
   const serviceArea = spec.service_area ? escapeHtml(spec.service_area) : "";
+
+  // Entity-rich h1: "Business Name — Doula in Area"
+  const primaryKeyword = spec.primary_keyword ? escapeHtml(spec.primary_keyword) : "Doula";
+  const entityH1 = serviceArea
+    ? `${businessName} &mdash; ${primaryKeyword} in ${serviceArea}`
+    : businessName;
+
+  // Answer paragraph for AI discoverability
+  const doulaName = spec.doula_name ? escapeHtml(spec.doula_name) : businessName;
+  const serviceNames = spec.services.slice(0, 3).map((s) => s.title.toLowerCase()).join(", ");
+  const answerParagraph = serviceArea && serviceNames
+    ? `<p class="hero__answer">${doulaName} provides ${escapeHtml(serviceNames)} in ${serviceArea}.</p>`
+    : "";
 
   const pageTitle = `${spec.business_name ?? "Home"} | Birth Worker`;
   const pageDescription = spec.tagline ?? `${spec.business_name ?? "Professional"} birth work services${spec.service_area ? ` in ${spec.service_area}` : ""}`;
@@ -40,15 +56,17 @@ export function generateHomePage(
     <img src="${escapeHtml(heroPhoto.publicUrl)}" alt="${escapeHtml(heroPhoto.altText)}" class="hero__bg" loading="eager" />
     <div class="hero__overlay"></div>
     <div class="hero__content">
-      <h1>${businessName}</h1>
+      <h1>${entityH1}</h1>
       ${tagline ? `<p class="hero__tagline">${tagline}</p>` : ""}
+      ${answerParagraph}
       ${heroCta}
     </div>
   </section>`
     : `<section class="hero hero--text-only">
     <div class="hero-inner">
-      <h1>${businessName}</h1>
+      <h1>${entityH1}</h1>
       ${tagline ? `<p class="tagline">${tagline}</p>` : ""}
+      ${answerParagraph}
       ${heroCta}
     </div>
   </section>`;
@@ -143,28 +161,8 @@ export function generateHomePage(
   </section>`;
   }
 
-  // Schema.org JSON-LD
-  const validSocial = getValidSocialLinks(spec.social_links);
-  const schemaData: Record<string, unknown> = {
-    "@context": "https://schema.org",
-    "@type": "LocalBusiness",
-    name: spec.business_name ?? "",
-    description: spec.tagline ?? "",
-  };
-  if (spec.service_area) {
-    schemaData["areaServed"] = spec.service_area;
-  }
-  if (spec.email) {
-    schemaData["email"] = spec.email;
-  }
-  if (spec.phone) {
-    schemaData["telephone"] = spec.phone;
-  }
-  if (validSocial.length > 0) {
-    schemaData["sameAs"] = validSocial.map((l) => l.url);
-  }
-  const safeJson = JSON.stringify(schemaData).replace(/</g, "\\u003c");
-  const schemaHtml = `<script type="application/ld+json">${safeJson}</script>`;
+  // Schema.org JSON-LD (LocalBusiness + Person + makesOffer)
+  const schemaHtml = renderJsonLd(buildLocalBusinessSchema(spec, photos));
 
   // CTA section
   const ctaHtml = spec.pages.includes("contact")

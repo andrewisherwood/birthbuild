@@ -105,7 +105,7 @@ ${head}
   <main id="main">
     <section class="section">
       <div class="section-inner">
-        <h1 class="section-title">Frequently Asked Questions</h1>
+        <h1 class="section-title">FAQ | ${escapeHtml(spec.business_name ?? "Birth Worker")}</h1>
         <p class="section-subtitle">Common questions about doula support and working together.</p>
         ${faqItems}
       </div>

@@ -216,3 +216,10 @@ _(Entries added by Security Agent via /security-audit skill)_
 - **LOW** `console.log` — src/hooks/useBuild.ts:582
 - **LOW** `console.log` — src/hooks/useBuild.ts:617
 
+
+### Scan — 23b2962 (2026-02-19T20:24:37Z)
+
+**Commit:** `23b2962` | **Files scanned:** 10 | **Findings:** 2
+
+- **CRITICAL** `SUPABASE_SERVICE_ROLE_KEY` — supabase/functions/chat/index.ts:625
+

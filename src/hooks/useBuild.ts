@@ -17,6 +17,8 @@ import { supabase } from "@/lib/supabase";
 import { getAccessTokenDirect, invokeEdgeFunctionBypass } from "@/lib/auth-bypass";
 import { generateSite } from "@/lib/site-generator";
 import { getPaletteColours, meetsContrastAA } from "@/lib/palettes";
+import { generateRobotsTxt, generateSitemap } from "@/lib/seo-files";
+import { generateLlmsTxt } from "@/lib/llms-txt";
 import type { SiteSpec, SiteSpecStatus, CheckpointPage, CheckpointDesignSystem } from "@/types/site-spec";
 import type { PhotoData } from "@/lib/pages/shared";
 import type { GenerationProgress, GenerationStage } from "@/components/dashboard/GenerationProgress";
@@ -136,35 +138,6 @@ async function ensureValidSession(): Promise<
 // invokeEdgeFunctionBypass is now provided by @/lib/auth-bypass as
 // invokeEdgeFunctionBypass — wraps getAccessTokenDirect() + raw fetch
 // so every edge function call is fully SDK-independent.
-
-// ---------------------------------------------------------------------------
-// Sitemap/robots helpers
-// ---------------------------------------------------------------------------
-
-function generateSitemap(pages: CheckpointPage[], baseUrl: string): string {
-  const urls = pages
-    .map(
-      (page) =>
-        `  <url>
-    <loc>${baseUrl}/${page.filename}</loc>
-    <changefreq>monthly</changefreq>
-    <priority>${page.filename === "index.html" ? "1.0" : "0.8"}</priority>
-  </url>`,
-    )
-    .join("\n");
-
-  return `<?xml version="1.0" encoding="UTF-8"?>
-<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-${urls}
-</urlset>`;
-}
-
-function generateRobotsTxt(baseUrl: string): string {
-  return `User-agent: *
-Allow: /
-
-Sitemap: ${baseUrl}/sitemap.xml`;
-}
 
 // ---------------------------------------------------------------------------
 // Hook
@@ -305,6 +278,7 @@ export function useBuild(siteSpec: SiteSpec | null): UseBuildReturn {
       }
       files.push({ path: "sitemap.xml", content: site.sitemap });
       files.push({ path: "robots.txt", content: site.robots });
+      files.push({ path: "llms.txt", content: site.llmsTxt });
 
       const { data, error } = await invokeEdgeFunctionBypass<{
         success?: boolean;
@@ -592,6 +566,7 @@ export function useBuild(siteSpec: SiteSpec | null): UseBuildReturn {
       }));
       files.push({ path: "sitemap.xml", content: generateSitemap(generatedPages, baseUrl) });
       files.push({ path: "robots.txt", content: generateRobotsTxt(baseUrl) });
+      files.push({ path: "llms.txt", content: generateLlmsTxt(spec) });
 
       const { data: buildData, error: buildErr } = await invokeEdgeFunctionBypass<{
         success?: boolean;

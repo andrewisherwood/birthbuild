@@ -14,6 +14,8 @@ import { generateServicesPage } from "@/lib/pages/services";
 import { generateContactPage } from "@/lib/pages/contact";
 import { generateTestimonialsPage } from "@/lib/pages/testimonials";
 import { generateFaqPage } from "@/lib/pages/faq";
+import { generateRobotsTxt, generateSitemap } from "@/lib/seo-files";
+import { generateLlmsTxt } from "@/lib/llms-txt";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -28,6 +30,7 @@ export interface GeneratedSite {
   pages: GeneratedPage[];
   sitemap: string;
   robots: string;
+  llmsTxt: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -61,42 +64,6 @@ function validateCustomColours(colours: CustomColours): CustomColours | null {
   }
 
   return colours;
-}
-
-// ---------------------------------------------------------------------------
-// Sitemap generation
-// ---------------------------------------------------------------------------
-
-function generateSitemap(
-  pages: GeneratedPage[],
-  baseUrl: string,
-): string {
-  const urls = pages
-    .map(
-      (page) =>
-        `  <url>
-    <loc>${baseUrl}/${page.filename}</loc>
-    <changefreq>monthly</changefreq>
-    <priority>${page.filename === "index.html" ? "1.0" : "0.8"}</priority>
-  </url>`,
-    )
-    .join("\n");
-
-  return `<?xml version="1.0" encoding="UTF-8"?>
-<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-${urls}
-</urlset>`;
-}
-
-// ---------------------------------------------------------------------------
-// Robots.txt generation
-// ---------------------------------------------------------------------------
-
-function generateRobotsTxt(baseUrl: string): string {
-  return `User-agent: *
-Allow: /
-
-Sitemap: ${baseUrl}/sitemap.xml`;
 }
 
 // ---------------------------------------------------------------------------
@@ -201,10 +168,14 @@ export function generateSite(
   // 6. Generate robots.txt
   const robots = generateRobotsTxt(baseUrl);
 
-  // 7. Return GeneratedSite
+  // 7. Generate llms.txt
+  const llmsTxt = generateLlmsTxt(spec);
+
+  // 8. Return GeneratedSite
   return {
     pages: generatedPages,
     sitemap,
     robots,
+    llmsTxt,
   };
 }

@@ -36,6 +36,7 @@ coverage/
 
 # Blog build output
 public/blog/
+public/sitemap.xml
 
 # Generated sites (built by MAI)
 generated-sites/

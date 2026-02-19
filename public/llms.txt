@@ -1,0 +1,24 @@
+# BirthBuild
+> AI-powered website builder for birth workers. Beautiful websites for doulas, midwives, and antenatal educators.
+
+## What is BirthBuild?
+BirthBuild is a website builder designed specifically for birth workers. Non-technical users build professional websites through a guided AI chatbot conversation or a form-based dashboard. Sites are deployed to a subdomain on birthbuild.com.
+
+## Features
+- AI-powered content writing (bios, service descriptions, taglines)
+- Curated colour palettes and typography for birth work
+- Mobile-first responsive design
+- SEO built in (schema markup, meta tags, sitemap)
+- Contact forms and social links
+- Photo upload with automatic optimisation
+- Instant hosting on birthbuild.com subdomains
+- Instructor mode for doula training workshops
+
+## Pricing
+- Free: Build and preview your site, all palettes and fonts, up to 4 pages
+- Pro (9 GBP/month or 89 GBP/year): Publish to yourname.birthbuild.com, unlimited pages and rebuilds, SEO and schema markup, contact form and social links, priority support
+
+## Links
+- Website: https://birthbuild.com
+- Blog: https://birthbuild.com/blog
+- Get started: https://birthbuild.com/app

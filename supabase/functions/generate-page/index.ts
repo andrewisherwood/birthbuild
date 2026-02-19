@@ -128,18 +128,30 @@ function buildSystemPrompt(page: string, spec: any, designSystem: DesignSystemIn
     case "home":
       pageSpecific = `## Home Page Requirements
 - Hero section: MUST use full-width background image with text overlay. Use the hero photo as an <img> with object-fit:cover positioned absolutely. Add gradient overlay div for readability. h1 + tagline + CTA in white on top. Use .hero, .hero__bg, .hero__overlay, .hero__content, .hero__tagline, .btn--hero classes. If no hero photo is available, use a text-only hero with .hero--text-only class and brand colours.
+- **Entity-rich h1**: Use "${businessName}${serviceArea ? ` — ${primaryKeyword || "Doula"} in ${serviceArea}` : ""}" as the h1 text.
+- **Answer paragraph**: After the tagline, add a <p class="hero__answer"> with: "${doulaName || businessName} provides [service names] in ${serviceArea}."
 - Services overview showing the first 3 services as cards. Each card MUST include a relevant image at the top if photos are available. Use .card--service wrapper with .card__image div (img inside) and .card__body div for text. Use .card__link for enquiry links. Fall back to plain .card if no images.
 - Featured testimonial (first one, if available)
 - About preview with a brief teaser linking to about.html
 - Final CTA section encouraging visitors to get in touch
-- Schema.org LocalBusiness JSON-LD in a <script type="application/ld+json"> block with:
-  - @type: LocalBusiness
-  - name: "${businessName}"
-  - areaServed: "${primaryLocation ? primaryLocation + ", " : ""}${serviceArea}"
-  - url: "https://${subdomain}.birthbuild.com"
-  ${email ? `- email: "${email}"` : ""}
-  ${phone ? `- telephone: "${phone}"` : ""}
-  ${trainingProvider ? `- hasCredential: "${trainingProvider}${trainingYear ? ` (${trainingYear})` : ""}"` : ""}`;
+- **Full LocalBusiness + Person JSON-LD** in a <script type="application/ld+json"> block:
+  \`\`\`json
+  {
+    "@context": "https://schema.org",
+    "@type": ["LocalBusiness", "HealthAndBeautyBusiness"],
+    "name": "${businessName}",
+    "description": "${tagline}",
+    "url": "https://${subdomain}.birthbuild.com",
+    ${email ? `"email": "${email}",` : ""}
+    ${phone ? `"telephone": "${phone}",` : ""}
+    ${serviceArea ? `"areaServed": "${serviceArea}",` : ""}
+    ${primaryLocation ? `"address": {"@type": "PostalAddress", "addressLocality": "${primaryLocation}"},` : ""}
+    "makesOffer": [for each service: {"@type":"Offer","itemOffered":{"@type":"Service","name":"...","description":"..."},"price":"...","priceCurrency":"GBP"}],
+    ${trainingProvider ? `"hasCredential": [{"@type":"EducationalOccupationalCredential","credentialCategory":"Professional Training","recognizedBy":{"@type":"Organization","name":"${trainingProvider}"}}],` : ""}
+    ${doulaName ? `"founder": {"@type": "Person", "name": "${doulaName}"},` : ""}
+    "sameAs": [social link URLs if any]
+  }
+  \`\`\``;
       break;
 
     case "about": {
@@ -152,25 +164,27 @@ function buildSystemPrompt(page: string, spec: any, designSystem: DesignSystemIn
       if (trainingYear) aboutExtras.push(`- Training year: ${trainingYear}`);
       const aboutExtrasStr = aboutExtras.length > 0 ? "\n" + aboutExtras.join("\n") : "";
       pageSpecific = `## About Page Requirements
-- Hero section with the page title
-- Bio section with the birth worker's biography
+- **Entity-rich h1**: "About ${doulaName || businessName}${primaryLocation ? ` | ${primaryLocation}` : serviceArea ? ` | ${serviceArea}` : ""}"
+- Bio section with the birth worker's biography. Start with an answer-first opening sentence.
 - Philosophy section with their approach statement
 - Qualifications section${doulaUk ? " (mention Doula UK membership)" : ""}${trainingProvider ? ` (trained with: ${trainingProvider})` : ""}${aboutExtrasStr}
 - CTA section encouraging visitors to get in touch
-- If a headshot photo is available, display it prominently`;
+- If a headshot photo is available, display it prominently
+- **Person + Credential JSON-LD** in a <script type="application/ld+json"> block with @type Person, name, and hasCredential array listing training provider, Doula UK (if applicable), and additional training.`;
       break;
     }
 
     case "services":
       pageSpecific = `## Services Page Requirements
-- Hero section with the page title
+- **Entity-rich h1**: "Services | ${businessName}${serviceArea ? ` in ${serviceArea}` : ""}"
 - Service cards — one card per service with title, description, and price
-- CTA section encouraging visitors to book/enquire`;
+- CTA section encouraging visitors to book/enquire
+- **Service schema JSON-LD** in a <script type="application/ld+json"> block with @graph containing an array of Service objects, each with name, description, provider (LocalBusiness with name "${businessName}"), and areaServed.`;
       break;
 
     case "contact":
       pageSpecific = `## Contact Page Requirements
-- Hero section with the page title
+- **Entity-rich h1**: "Contact ${businessName}${serviceArea ? ` | ${serviceArea}` : ""}"
 - Contact form using Netlify Forms (add data-netlify="true" and name="contact" attributes to the <form>)
   - Fields: Name (required), Email (required), Phone (optional), Message (required, textarea)
   - Submit button
@@ -183,17 +197,19 @@ function buildSystemPrompt(page: string, spec: any, designSystem: DesignSystemIn
 
     case "testimonials":
       pageSpecific = `## Testimonials Page Requirements
-- Hero section with the page title
+- **Entity-rich h1**: "Client Reviews | ${businessName}"
 - All testimonials displayed as styled blockquotes with attribution
-- CTA section encouraging visitors to get in touch`;
+- CTA section encouraging visitors to get in touch
+- **Review + AggregateRating JSON-LD** in a <script type="application/ld+json"> block with @type LocalBusiness, aggregateRating (ratingValue 5, reviewCount ${testimonials.length}), and a review array with each testimonial as a Review object (reviewBody, author Person, ratingValue 5).`;
       break;
 
     case "faq":
       pageSpecific = `## FAQ Page Requirements
-- Hero section with the page title
+- **Entity-rich h1**: "FAQ | ${businessName}"
 - FAQ items using <details>/<summary> elements for accessible expand/collapse
 - Generate 4-6 relevant FAQs about doula/birth worker services if none are specified in the content
-- CTA section encouraging visitors to get in touch`;
+- CTA section encouraging visitors to get in touch
+- **FAQPage JSON-LD** in a <script type="application/ld+json"> block with @type FAQPage and mainEntity array of Question objects, each with name and acceptedAnswer (Answer with text).`;
       break;
   }
 
@@ -268,7 +284,7 @@ Generate a complete \`<!DOCTYPE html>\` page with:
 - WCAG AA accessible (labels, alt text, focus styles, contrast)
 - British English throughout (colour, organisation, labour, specialise, centre, programme)
 - No medical claims or language that could be construed as medical advice
-- No JavaScript (except JSON-LD on the home page)
+- No JavaScript. \`<script type="application/ld+json">\` IS permitted on any page — JSON-LD is structured data, not executable code.
 - Mobile-first responsive (the CSS handles this)
 - Creative, professional, and warm — make this site stand out
 - CRITICAL: Do NOT add any inline styles with hardcoded colours. Use var(--colour-primary), var(--colour-accent), etc. from the design system CSS.

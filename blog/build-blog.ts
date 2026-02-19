@@ -410,7 +410,7 @@ function buildPostPage(post: Post, allPosts: Post[]): string {
 // Sitemap
 // ---------------------------------------------------------------------------
 
-function buildSitemap(posts: Post[]): string {
+function buildBlogSitemap(posts: Post[]): string {
   const urls = [
     `  <url>
     <loc>${BASE_URL}/blog</loc>
@@ -425,6 +425,47 @@ function buildSitemap(posts: Post[]): string {
     <priority>0.7</priority>
   </url>`,
     ),
+  ];
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+${urls.join("\n")}
+</urlset>`;
+}
+
+/**
+ * Build a root sitemap.xml combining landing page + blog URLs.
+ * Output to public/sitemap.xml so Vite copies it to dist/.
+ */
+function buildRootSitemap(posts: Post[]): string {
+  const today = new Date().toISOString().split("T")[0];
+  const urls = [
+    `  <url>
+    <loc>${BASE_URL}/</loc>
+    <lastmod>${today}</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>1.0</priority>
+  </url>`,
+    `  <url>
+    <loc>${BASE_URL}/blog</loc>
+    <lastmod>${today}</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>`,
+    ...posts.map(
+      (p) => `  <url>
+    <loc>${BASE_URL}/blog/${p.frontmatter.slug}</loc>
+    <lastmod>${p.frontmatter.updated ?? p.frontmatter.date}</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>`,
+    ),
+    `  <url>
+    <loc>${BASE_URL}/llms.txt</loc>
+    <lastmod>${today}</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.3</priority>
+  </url>`,
   ];
 
   return `<?xml version="1.0" encoding="UTF-8"?>
@@ -472,10 +513,16 @@ function main(): void {
     console.log(`Built: /blog/${post.frontmatter.slug}/index.html`);
   }
 
-  // Build sitemap
-  const sitemap = buildSitemap(posts);
+  // Build blog sitemap
+  const sitemap = buildBlogSitemap(posts);
   fs.writeFileSync(path.join(OUTPUT_DIR, "sitemap.xml"), sitemap);
   console.log("Built: /blog/sitemap.xml");
+
+  // Build root sitemap (landing + blog + llms.txt)
+  const rootSitemap = buildRootSitemap(posts);
+  const publicDir = path.join(ROOT, "public");
+  fs.writeFileSync(path.join(publicDir, "sitemap.xml"), rootSitemap);
+  console.log("Built: /sitemap.xml (root)");
 
   console.log(`\nDone! ${posts.length} posts built to ${OUTPUT_DIR}`);
 }

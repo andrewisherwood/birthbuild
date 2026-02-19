@@ -11,6 +11,7 @@ import {
   generateNav,
   generateFooter,
 } from "@/lib/pages/shared";
+import { buildAggregateRatingSchema, renderJsonLd } from "@/lib/schema-generators";
 
 export function generateTestimonialsPage(
   spec: SiteSpec,
@@ -44,6 +45,11 @@ export function generateTestimonialsPage(
   </section>`
     : "";
 
+  const entityH1 = `Client Reviews | ${escapeHtml(spec.business_name ?? "Birth Worker")}`;
+
+  const aggregateSchema = buildAggregateRatingSchema(spec);
+  const reviewSchemaHtml = aggregateSchema ? renderJsonLd(aggregateSchema) : "";
+
   return `<!DOCTYPE html>
 <html lang="en-GB">
 ${head}
@@ -52,7 +58,7 @@ ${head}
   <main id="main">
     <section class="section">
       <div class="section-inner">
-        <h1 class="section-title">What Families Say</h1>
+        <h1 class="section-title">${entityH1}</h1>
         <p class="section-subtitle">Kind words from the families I've had the privilege of supporting.</p>
         ${testimonialCards}
       </div>
@@ -60,6 +66,7 @@ ${head}
     ${ctaHtml}
   </main>
   ${footer}
+  ${reviewSchemaHtml}
 </body>
 </html>`;
 }

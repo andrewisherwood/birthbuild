@@ -6,7 +6,52 @@
  * - Inline SVG
  * - Netlify Forms attributes (data-netlify, netlify, name)
  * - Relative URLs
+ * - <script type="application/ld+json"> (JSON-LD structured data)
  */
+
+// ---------------------------------------------------------------------------
+// JSON-LD preservation
+// ---------------------------------------------------------------------------
+
+/** Matches <script type="application/ld+json">...</script> blocks. */
+const JSONLD_RE = /<script\s+type\s*=\s*["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script\s*>/gi;
+
+/**
+ * Extract JSON-LD blocks, replacing with placeholders.
+ * Returns the modified HTML and an array of validated JSON-LD strings.
+ */
+function extractJsonLd(html: string): { html: string; blocks: string[] } {
+  const blocks: string[] = [];
+  const modified = html.replace(JSONLD_RE, (_match, content: string) => {
+    try {
+      // Round-trip through JSON.parse → JSON.stringify to strip anything
+      // that isn't valid JSON. Escape </ sequences to prevent script breakout.
+      const parsed: unknown = JSON.parse(content);
+      const safe = JSON.stringify(parsed).replace(/</g, "\\u003c");
+      const placeholder = `__JSONLD_${blocks.length}__`;
+      blocks.push(safe);
+      return placeholder;
+    } catch {
+      // Invalid JSON — discard the block entirely
+      return "";
+    }
+  });
+  return { html: modified, blocks };
+}
+
+/**
+ * Restore validated JSON-LD blocks from placeholders.
+ */
+function restoreJsonLd(html: string, blocks: string[]): string {
+  let result = html;
+  for (let i = 0; i < blocks.length; i++) {
+    result = result.replace(
+      `__JSONLD_${i}__`,
+      `<script type="application/ld+json">${blocks[i]}</script>`,
+    );
+  }
+  return result;
+}
 
 // ---------------------------------------------------------------------------
 // Patterns
@@ -53,9 +98,12 @@ const HTTP_URL_RE = /(\s(?:href|src)\s*=\s*(?:"|'))http:\/\//gi;
  * - Inline SVG
  * - Netlify Forms attributes
  * - Relative URLs
+ * - <script type="application/ld+json"> blocks (validated via JSON round-trip)
  */
 export function sanitiseHtml(html: string): string {
-  let sanitised = html;
+  // 0. Extract JSON-LD blocks before script stripping (validated via JSON round-trip)
+  const { html: withoutJsonLd, blocks } = extractJsonLd(html);
+  let sanitised = withoutJsonLd;
 
   // 1. Strip <script> tags and contents (closed first, then unclosed)
   sanitised = sanitised.replace(SCRIPT_TAG_RE, "");
@@ -72,6 +120,9 @@ export function sanitiseHtml(html: string): string {
 
   // 5. Upgrade http:// to https:// in links/sources
   sanitised = sanitised.replace(HTTP_URL_RE, "$1https://");
+
+  // 6. Restore validated JSON-LD blocks
+  sanitised = restoreJsonLd(sanitised, blocks);
 
   return sanitised;
 }

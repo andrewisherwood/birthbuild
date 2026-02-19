@@ -11,6 +11,7 @@ import {
   generateFooter,
   type PhotoData,
 } from "@/lib/pages/shared";
+import { buildCredentialSchema, renderJsonLd } from "@/lib/schema-generators";
 
 export function generateAboutPage(
   spec: SiteSpec,
@@ -84,6 +85,18 @@ export function generateAboutPage(
   </section>`
     : "";
 
+  const locationSuffix = spec.primary_location
+    ? escapeHtml(spec.primary_location)
+    : spec.service_area
+      ? escapeHtml(spec.service_area)
+      : "";
+  const entityH1 = locationSuffix
+    ? `About ${doulaName} | ${locationSuffix}`
+    : `About ${doulaName}`;
+
+  const credSchema = buildCredentialSchema(spec);
+  const credSchemaHtml = credSchema ? renderJsonLd(credSchema) : "";
+
   return `<!DOCTYPE html>
 <html lang="en-GB">
 ${head}
@@ -92,7 +105,7 @@ ${head}
   <main id="main">
     <section class="section">
       <div class="section-inner">
-        <h1 class="section-title">About ${doulaName}</h1>
+        <h1 class="section-title">${entityH1}</h1>
         <div class="about-grid">
           <div>
             ${bioHtml}
@@ -106,6 +119,7 @@ ${head}
     ${ctaHtml}
   </main>
   ${footer}
+  ${credSchemaHtml}
 </body>
 </html>`;
 }

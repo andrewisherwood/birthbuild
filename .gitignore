@@ -34,5 +34,8 @@ npm-debug.log*
 # Testing
 coverage/
 
+# Blog build output
+public/blog/
+
 # Generated sites (built by MAI)
 generated-sites/

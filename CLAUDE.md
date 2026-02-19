@@ -5,8 +5,8 @@
 BirthBuild is an AI-powered static website builder for birth workers (doulas, midwives, antenatal educators). Non-technical users build professional websites through a guided chatbot conversation or a form-based dashboard. An instructor creates workshop sessions, invites students via magic link, and monitors progress. The chatbot gathers preferences and content, produces a structured site specification, and triggers a build pipeline that generates and deploys a static site to a provisioned subdomain on birthbuild.com.
 
 See `SCOPING.md` for full product specification including data model, feature breakdown, and build phases.
-See `scoping-rebuild.md` for the precise rebuild specification derived from the existing codebase.
-See `uk-doula-website-research.md` for design patterns, colour palettes, accessibility trees, and SEO requirements that inform generated site output.
+See `SCOPING-SPEC-DENSITY.md` for the spec density module design (depth fields, scoring algorithm, chat integration).
+See `SCOPING_NATURAL LANGUAGE_EDITOR.md` for the natural language site editing specification.
 
 ## Tech Stack
 
@@ -104,10 +104,19 @@ birthbuild/
 │   │   ├── supabase.ts            # Supabase client init
 │   │   ├── auth-bypass.ts         # SDK bypass for Edge Functions + Storage (avoids auth lock hangs)
 │   │   ├── density-score.ts       # Spec density scoring algorithm
+│   │   ├── design-tokens.ts       # Spacing, border-radius, typography scale token definitions
 │   │   ├── claude.ts              # Claude API call helpers (via Edge Function)
 │   │   ├── chat-prompts.ts        # System prompts and step definitions for chat
 │   │   ├── chat-tools.ts          # Tool definitions and spec-update mapping
-│   │   ├── site-generator.ts      # Static site HTML/CSS generation
+│   │   ├── site-generator.ts      # Static site HTML/CSS generation (orchestrator)
+│   │   ├── pages/                 # Template build: per-page HTML generators
+│   │   │   ├── shared.ts          # CSS generation, nav, footer, social icons, escaping
+│   │   │   ├── home.ts            # Home page (hero overlay, service cards, testimonial, about teaser)
+│   │   │   ├── about.ts           # About page (bio, philosophy, qualifications)
+│   │   │   ├── services.ts        # Services page (full service cards)
+│   │   │   ├── contact.ts         # Contact page (Netlify form, contact info)
+│   │   │   ├── testimonials.ts    # Testimonials page (all testimonials)
+│   │   │   └── faq.ts             # FAQ page (details/summary accordion)
 │   │   ├── section-parser.ts      # Parse/reorder/remove HTML sections (bb-section markers)
 │   │   ├── css-editor.ts          # Extract/update CSS variables in checkpoint HTML
 │   │   ├── wordmark.ts            # SVG wordmark logo generation
@@ -176,10 +185,6 @@ birthbuild/
 │           ├── footer.html        # Blog footer (matches landing page)
 │           ├── cta-banner.html    # Mid-article CTA
 │           └── post-card.html     # Post card for grids
-└── templates/                     # Static site template assets
-    ├── base/                      # Base HTML/CSS structure
-    ├── palettes/                  # Colour palette CSS variables
-    └── components/                # Reusable site section templates
 ```
 
 ### Coding Standards
@@ -291,7 +296,6 @@ npx prettier --write src/
 - All generated sites must meet WCAG 2.1 AA
 - Admin PWA should meet WCAG 2.1 AA where practical
 - Colour contrast ratios validated at build time for generated sites
-- See accessibility tree in `uk-doula-website-research.md` section 6 for semantic structure
 
 ### Browser Support
 - Admin PWA: latest 2 versions of Chrome, Safari, Firefox, Edge

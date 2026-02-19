@@ -234,6 +234,23 @@
         box-shadow: 0 4px 16px rgba(95, 113, 97, 0.25);
       }
 
+      /* ── Mobile menu ── */
+      .nav-hamburger {
+        display: none;
+        background: none;
+        border: none;
+        cursor: pointer;
+        padding: 0.5rem;
+        color: var(--text);
+        z-index: 110;
+      }
+      .nav-hamburger svg {
+        display: block;
+      }
+      .nav-overlay {
+        display: none;
+      }
+
       /* ── Hero ── */
       .hero {
         min-height: 100vh;
@@ -1243,8 +1260,53 @@
         nav {
           padding: 0.75rem 1.25rem;
         }
-        .nav-links a:not(.nav-cta) {
-          display: none;
+        .nav-hamburger {
+          display: block;
+          order: 2;
+        }
+        .nav-links {
+          position: fixed;
+          top: 0;
+          right: 0;
+          width: 280px;
+          height: 100dvh;
+          background: var(--cream);
+          flex-direction: column;
+          padding: 5rem 2rem 2rem;
+          gap: 0.25rem;
+          box-shadow: -8px 0 32px rgba(0, 0, 0, 0.1);
+          transform: translateX(100%);
+          transition: transform 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+          z-index: 105;
+        }
+        .nav-links.open {
+          transform: translateX(0);
+        }
+        .nav-links a {
+          display: block !important;
+          font-size: 1rem;
+          padding: 0.75rem 0;
+          border-bottom: 1px solid var(--sand-dark);
+        }
+        .nav-links a.nav-cta {
+          margin-top: 1.5rem;
+          text-align: center;
+          border-bottom: none;
+          padding: 0.85rem 2rem;
+        }
+        .nav-overlay {
+          position: fixed;
+          inset: 0;
+          background: rgba(0, 0, 0, 0.3);
+          z-index: 104;
+          opacity: 0;
+          transition: opacity 0.3s;
+          pointer-events: none;
+        }
+        .nav-overlay.open {
+          display: block;
+          opacity: 1;
+          pointer-events: auto;
         }
         section {
           padding: 4.5rem 1.25rem;
@@ -1303,6 +1365,14 @@
     <!-- Nav -->
     <nav>
       <a href="/" class="nav-logo">Birth<span>Build</span></a>
+      <button class="nav-hamburger" aria-label="Open menu" aria-expanded="false">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="3" y1="6" x2="21" y2="6" />
+          <line x1="3" y1="12" x2="21" y2="12" />
+          <line x1="3" y1="18" x2="21" y2="18" />
+        </svg>
+      </button>
+      <div class="nav-overlay"></div>
       <div class="nav-links">
         <a href="#how">How It Works</a>
         <a href="#features">Features</a>
@@ -2307,8 +2377,32 @@
           document
             .querySelector(href)
             ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          closeMenu();
         });
       });
+
+      // Mobile menu toggle
+      const hamburger = document.querySelector('.nav-hamburger');
+      const navLinks = document.querySelector('.nav-links');
+      const navOverlay = document.querySelector('.nav-overlay');
+
+      function closeMenu() {
+        navLinks.classList.remove('open');
+        navOverlay.classList.remove('open');
+        hamburger.setAttribute('aria-expanded', 'false');
+        hamburger.innerHTML = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>';
+      }
+
+      hamburger.addEventListener('click', () => {
+        const isOpen = navLinks.classList.toggle('open');
+        navOverlay.classList.toggle('open');
+        hamburger.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+        hamburger.innerHTML = isOpen
+          ? '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>'
+          : '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>';
+      });
+
+      navOverlay.addEventListener('click', closeMenu);
     </script>
   </body>
 </html>

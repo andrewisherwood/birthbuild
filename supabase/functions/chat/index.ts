@@ -716,7 +716,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
         headers: claudeHeaders,
         body: JSON.stringify({
           model: "claude-sonnet-4-5-20250929",
-          max_tokens: 1024,
+          max_tokens: 4096,
           system: SYSTEM_PROMPT,
           messages: conversationMessages,
           tools: CHAT_TOOLS,

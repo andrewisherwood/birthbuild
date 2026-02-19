@@ -71,10 +71,56 @@ Collect design preferences with depth:
 1. Style: [CHOICES: Modern & Clean | Classic & Warm | Minimal & Calm]
 2. Palette: [CHOICES: Sage & Sand | Blush & Neutral | Deep Earth | Ocean Calm | Custom]
 3. Typography: [CHOICES: Modern | Classic | Mixed]
-4. Save with update_style
+4. Save with update_style (include custom_colours object when palette is Custom, include font_heading and font_body when the user names specific fonts)
 5. FOLLOW-UP: "Is there a word or feeling you want someone to get when they land on your site? For example: calm, professional, warm, earthy, luxurious, friendly..." → save brand_feeling with update_style
    PAYOFF: "That feeling will guide the whole design — the spacing, the imagery style, everything."
 6. OPTIONAL: "Do you have a website you love the look of? Does not have to be a doula site — could be any website whose vibe matches yours." → save style_inspiration_url with update_style. Say: "Feel free to skip this one if you'd prefer."
+
+#### Colour Capture Rules (when user selects Custom or describes brand colours)
+
+1. ALWAYS ask for exact hex codes first: "Do you have the hex codes from your brand kit? Exact codes will make your site match perfectly."
+
+2. If the user provides hex codes, store them directly in custom_colours. Do not modify or "improve" them.
+
+3. If the user describes colours in words only, generate hex codes AND confirm them visually. Use this reference:
+   - "terracotta" / "rust" / "burnt orange" → range #B7553A to #C4552A
+   - "teal" / "peacock" → range #2A6B6A to #1A5C5A
+   - "sage" / "eucalyptus" → range #87A878 to #9CAF88
+   - "blush" / "dusty pink" → range #E8CFC4 to #D4A5A5
+   - "navy" → range #1B2A4A to #2C3E6B
+   - "forest green" → range #2D5F2D to #165E40
+   - "burgundy" / "wine" → range #722F37 to #800020
+   - "mustard" / "ochre" → range #D4A843 to #C8963E
+   - "cream" / "off-white" → range #FAF6F1 to #F5F0E8
+   - "charcoal" → range #36454F to #2D2926
+   - "coral" → range #E8735A to #FF6F61
+   - "lavender" → range #B4A7D6 to #9B8EC4
+   - "slate" / "steel blue" → range #5A7D9A to #4A6A82
+   Present the generated hex with a description: "I've translated your terracotta to #B7553A — a rich warm rust. And your teal to #2A6B6A — a deep peacock teal. Do these sound right, or would you like to adjust?"
+
+4. NEVER silently store generated hex codes without user confirmation. Always show them the hex and ask.
+
+5. If the user says they can "dig out" or "find" their hex codes, encourage this: "Yes please! Your exact brand codes will give the best result. Take your time."
+
+6. Store confirmed hex codes in custom_colours with the user's original description:
+   - custom_colours.primary + custom_colours.primary_description: "terracotta/rust"
+   - custom_colours.accent + custom_colours.accent_description: "deep peacock teal"
+   - Also set palette to "custom" when storing custom_colours.
+
+7. For the full custom_colours object, you must also provide background, text, and cta colours. If the user only describes 1-2 brand colours, derive sensible defaults:
+   - Background: a very light tint of their primary or a neutral cream/white
+   - Text: a dark neutral (#2D2926 or similar) with good contrast against the background
+   - CTA: usually the primary colour, or accent if more appropriate
+
+#### Typography Capture Rules
+
+1. If the user mentions specific fonts by name (e.g. "Montserrat for headings and Lora for body"), store the EXACT font names with font_heading and font_body in update_style. Do not substitute "similar" fonts.
+
+2. Named fonts take priority over the typography preset. If they select "Mixed" AND specify font names, the named fonts win.
+
+3. Confirm back: "I'll use Montserrat for your headings and Lora for body text — that's a great pairing."
+
+4. If they describe fonts vaguely ("something elegant", "a clean sans-serif"), then and only then should you select from the typography preset and let it determine fonts.
 
 ### Step 4: Your Story (Content)
 Use guided reflection to build a rich bio. Frame it warmly:
@@ -239,7 +285,7 @@ const CHAT_TOOLS: Array<Record<string, unknown>> = [
   {
     name: "update_style",
     description:
-      "Save or update the website design preferences including style, colour palette, typography, brand feeling, and inspiration.",
+      "Save or update the website design preferences including style, colour palette, custom colours, typography, font choices, brand feeling, and inspiration.",
     input_schema: {
       type: "object",
       properties: {
@@ -253,10 +299,35 @@ const CHAT_TOOLS: Array<Record<string, unknown>> = [
           enum: ["sage_sand", "blush_neutral", "deep_earth", "ocean_calm", "custom"],
           description: "Colour palette for the website",
         },
+        custom_colours: {
+          type: "object",
+          description: "Custom colour hex values and optional descriptions. Only used when palette is 'custom'.",
+          properties: {
+            background: { type: "string", description: "Background colour hex (e.g. '#FAF6F1')" },
+            primary: { type: "string", description: "Primary/heading colour hex (e.g. '#B7553A')" },
+            accent: { type: "string", description: "Accent/secondary colour hex (e.g. '#2A6B6A')" },
+            text: { type: "string", description: "Body text colour hex (e.g. '#2D2926')" },
+            cta: { type: "string", description: "CTA button colour hex (e.g. '#B7553A')" },
+            primary_description: { type: "string", description: "User's original description of the primary colour (e.g. 'terracotta/rust')" },
+            accent_description: { type: "string", description: "User's original description of the accent colour (e.g. 'deep peacock teal')" },
+            background_description: { type: "string", description: "User's original description of the background colour" },
+            text_description: { type: "string", description: "User's original description of the text colour" },
+            cta_description: { type: "string", description: "User's original description of the CTA colour" },
+          },
+          required: ["background", "primary", "accent", "text", "cta"],
+        },
         typography: {
           type: "string",
           enum: ["modern", "classic", "mixed"],
-          description: "Typography style",
+          description: "Typography style preset",
+        },
+        font_heading: {
+          type: "string",
+          description: "Exact heading font name if the user specified one (e.g. 'Montserrat'). Overrides the typography preset for headings.",
+        },
+        font_body: {
+          type: "string",
+          description: "Exact body font name if the user specified one (e.g. 'Lora'). Overrides the typography preset for body text.",
         },
         brand_feeling: {
           type: "string",

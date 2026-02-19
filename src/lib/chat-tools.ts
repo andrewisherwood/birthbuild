@@ -11,6 +11,7 @@ import type {
   SiteSpec,
   ServiceItem,
   SocialLinks,
+  CustomColours,
   StyleOption,
   PaletteOption,
   TypographyOption,
@@ -92,7 +93,7 @@ export const CHAT_TOOLS: ClaudeToolDefinition[] = [
   {
     name: "update_style",
     description:
-      "Save or update the website design preferences including style, colour palette, typography, brand feeling, and inspiration.",
+      "Save or update the website design preferences including style, colour palette, custom colours, typography, font choices, brand feeling, and inspiration.",
     input_schema: {
       type: "object",
       properties: {
@@ -106,10 +107,38 @@ export const CHAT_TOOLS: ClaudeToolDefinition[] = [
           enum: ["sage_sand", "blush_neutral", "deep_earth", "ocean_calm", "custom"],
           description: "Colour palette for the website",
         },
+        custom_colours: {
+          type: "object",
+          description:
+            "Custom colour hex values and optional descriptions. Only used when palette is 'custom'.",
+          properties: {
+            background: { type: "string", description: "Background colour hex (e.g. '#FAF6F1')" },
+            primary: { type: "string", description: "Primary/heading colour hex (e.g. '#B7553A')" },
+            accent: { type: "string", description: "Accent/secondary colour hex (e.g. '#2A6B6A')" },
+            text: { type: "string", description: "Body text colour hex (e.g. '#2D2926')" },
+            cta: { type: "string", description: "CTA button colour hex (e.g. '#B7553A')" },
+            primary_description: { type: "string", description: "User's original description of the primary colour (e.g. 'terracotta/rust')" },
+            accent_description: { type: "string", description: "User's original description of the accent colour (e.g. 'deep peacock teal')" },
+            background_description: { type: "string", description: "User's original description of the background colour" },
+            text_description: { type: "string", description: "User's original description of the text colour" },
+            cta_description: { type: "string", description: "User's original description of the CTA colour" },
+          },
+          required: ["background", "primary", "accent", "text", "cta"],
+        },
         typography: {
           type: "string",
           enum: ["modern", "classic", "mixed"],
-          description: "Typography style",
+          description: "Typography style preset",
+        },
+        font_heading: {
+          type: "string",
+          description:
+            "Exact heading font name if the user specified one (e.g. 'Montserrat'). Overrides the typography preset.",
+        },
+        font_body: {
+          type: "string",
+          description:
+            "Exact body font name if the user specified one (e.g. 'Lora'). Overrides the typography preset.",
         },
         brand_feeling: {
           type: "string",
@@ -368,8 +397,20 @@ export function mapToolCallToSpecUpdate(
       if (typeof toolArgs.palette === "string") {
         update.palette = toolArgs.palette as PaletteOption;
       }
+      if (
+        typeof toolArgs.custom_colours === "object" &&
+        toolArgs.custom_colours !== null
+      ) {
+        update.custom_colours = toolArgs.custom_colours as CustomColours;
+      }
       if (typeof toolArgs.typography === "string") {
         update.typography = toolArgs.typography as TypographyOption;
+      }
+      if (typeof toolArgs.font_heading === "string") {
+        update.font_heading = toolArgs.font_heading;
+      }
+      if (typeof toolArgs.font_body === "string") {
+        update.font_body = toolArgs.font_body;
       }
       if (typeof toolArgs.brand_feeling === "string") {
         update.brand_feeling = toolArgs.brand_feeling;

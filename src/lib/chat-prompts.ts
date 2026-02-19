@@ -15,7 +15,7 @@ The chatbot guides the user through 7 steps with intelligent follow-up questions
 
 1. Welcome — introduction and set expectations (15-20 minutes)
 2. Basics — business info + location depth + service depth (birth_types, format, programme, experience_level)
-3. Style — design preferences + brand_feeling + style_inspiration_url
+3. Style — design preferences + brand_feeling + style_inspiration_url + colour capture (hex confirmation, description labels) + font capture (exact font names override presets)
 4. Content — guided bio elicitation (previous career, origin story, training, additional training, philosophy, client perception, signature story) + bio generation + testimonials
 5. Photos — upload panel
 6. Contact — email, phone, booking URL, social links, Doula UK membership

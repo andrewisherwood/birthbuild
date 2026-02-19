@@ -34,6 +34,11 @@ export interface CustomColours {
   accent: string;
   text: string;
   cta: string;
+  background_description?: string;
+  primary_description?: string;
+  accent_description?: string;
+  text_description?: string;
+  cta_description?: string;
 }
 
 export type SiteSpecStatus = "draft" | "building" | "preview" | "live" | "error";

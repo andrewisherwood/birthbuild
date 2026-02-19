@@ -49,13 +49,7 @@ function isValidHexColour(value: string): boolean {
  * to trigger fallback to a preset palette.
  */
 function validateCustomColours(colours: CustomColours): CustomColours | null {
-  const keys: (keyof CustomColours)[] = [
-    "background",
-    "primary",
-    "accent",
-    "text",
-    "cta",
-  ];
+  const keys = ["background", "primary", "accent", "text", "cta"] as const;
 
   for (const key of keys) {
     if (!isValidHexColour(colours[key])) {

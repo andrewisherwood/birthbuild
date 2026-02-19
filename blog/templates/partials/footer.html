@@ -1,0 +1,90 @@
+<footer>
+  <div class="footer-inner">
+    <div>
+      <div class="footer-brand">Birth<span>Build</span></div>
+      <div class="footer-tagline">
+        Beautiful websites for birth workers. Built with care by Dopamine Labs.
+      </div>
+    </div>
+    <div class="footer-links">
+      <div class="footer-col">
+        <h4>Product</h4>
+        <a href="/#features">Features</a>
+        <a href="/#pricing">Pricing</a>
+        <a href="/#instructors">For Instructors</a>
+        <a href="/blog">Blog</a>
+      </div>
+      <div class="footer-col">
+        <h4>Support</h4>
+        <a href="#">Help Centre</a>
+        <a href="#">Contact</a>
+        <a href="#">Status</a>
+      </div>
+      <div class="footer-col">
+        <h4>Legal</h4>
+        <a href="#">Privacy</a>
+        <a href="#">Terms</a>
+      </div>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>&copy; 2026 Dopamine Labs. All rights reserved.</span>
+    <span>Made with care in Wimbledon</span>
+  </div>
+</footer>
+<style>
+  footer {
+    background: var(--text);
+    color: rgba(255, 255, 255, 0.6);
+    padding: 4rem 2rem 2rem;
+  }
+  .footer-inner {
+    max-width: 1200px;
+    margin: 0 auto;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    flex-wrap: wrap;
+    gap: 2rem;
+  }
+  .footer-brand {
+    font-family: var(--font-display);
+    font-size: 1.4rem;
+    font-weight: 500;
+    color: white;
+    margin-bottom: 0.5rem;
+  }
+  .footer-brand span { color: rgba(255, 255, 255, 0.4); font-weight: 300; }
+  .footer-tagline { font-size: 0.85rem; max-width: 280px; line-height: 1.5; }
+  .footer-links { display: flex; gap: 3rem; }
+  .footer-col h4 {
+    color: white;
+    font-size: 0.8rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    margin-bottom: 1rem;
+  }
+  .footer-col a {
+    display: block;
+    font-size: 0.85rem;
+    color: rgba(255, 255, 255, 0.5);
+    text-decoration: none;
+    margin-bottom: 0.6rem;
+    transition: color 0.2s;
+  }
+  .footer-col a:hover { color: white; }
+  .footer-bottom {
+    max-width: 1200px;
+    margin: 3rem auto 0;
+    padding-top: 1.5rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.78rem;
+  }
+  @media (max-width: 768px) {
+    .footer-links { gap: 2rem; }
+    .footer-bottom { flex-direction: column; gap: 0.5rem; }
+  }
+</style>

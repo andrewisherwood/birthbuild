@@ -7,8 +7,7 @@
  */
 
 import { useState, useCallback, useEffect } from "react";
-import { supabase } from "@/lib/supabase";
-import { invokeEdgeFunctionBypass } from "@/lib/auth-bypass";
+import { invokeEdgeFunctionBypass, postgrestBypass } from "@/lib/auth-bypass";
 import type {
   SiteCheckpoint,
   CheckpointPage,
@@ -86,20 +85,19 @@ export function useCheckpoint(): UseCheckpointReturn {
     setLoading(true);
     setError(null);
 
-    const { data, error: fetchError } = await supabase
-      .from("site_checkpoints")
-      .select("*")
-      .eq("site_spec_id", siteSpecId)
-      .order("version", { ascending: false });
+    const { data, error: fetchError } = await postgrestBypass<CheckpointRow[]>({
+      table: "site_checkpoints",
+      queryParams: `select=*&site_spec_id=eq.${siteSpecId}&order=version.desc`,
+    });
 
     if (fetchError) {
-      console.error("[useCheckpoint] Fetch error:", fetchError.message);
+      console.error("[useCheckpoint] Fetch error:", fetchError);
       setError("Failed to load checkpoints.");
       setLoading(false);
       return;
     }
 
-    setCheckpoints((data ?? []).map((row) => toCheckpoint(row as CheckpointRow)));
+    setCheckpoints((data ?? []).map((row) => toCheckpoint(row)));
     setLoading(false);
   }, []);
 
@@ -117,40 +115,41 @@ export function useCheckpoint(): UseCheckpointReturn {
       // on conflict we re-read the max version and retry (up to 3 attempts).
       let checkpoint: SiteCheckpoint | null = null;
       for (let attempt = 0; attempt < 3; attempt++) {
-        const { data: maxRow } = await supabase
-          .from("site_checkpoints")
-          .select("version")
-          .eq("site_spec_id", siteSpecId)
-          .order("version", { ascending: false })
-          .limit(1)
-          .single();
+        const { data: versionRows } = await postgrestBypass<Array<{ version: number }>>({
+          table: "site_checkpoints",
+          queryParams: `select=version&site_spec_id=eq.${siteSpecId}&order=version.desc&limit=1`,
+        });
 
-        const nextVersion = maxRow ? Number(maxRow.version) + 1 : 1;
+        const nextVersion = (versionRows?.[0]?.version ?? 0) + 1;
 
-        const { data, error: insertError } = await supabase
-          .from("site_checkpoints")
-          .insert({
+        const { data: insertRows, error: insertError, statusCode } = await postgrestBypass<
+          CheckpointRow[]
+        >({
+          table: "site_checkpoints",
+          method: "POST",
+          queryParams: "select=*",
+          body: {
             site_spec_id: siteSpecId,
             version: nextVersion,
             html_pages: { pages },
             design_system: designSystem ?? null,
             label: label ?? null,
-          })
-          .select()
-          .single();
+          },
+          headers: { Prefer: "return=representation" },
+        });
 
-        if (!insertError && data) {
-          checkpoint = toCheckpoint(data as CheckpointRow);
+        if (!insertError && insertRows?.[0]) {
+          checkpoint = toCheckpoint(insertRows[0]);
           break;
         }
 
-        // If it's a unique violation (code 23505), retry with a fresh version
-        if (insertError?.code === "23505" && attempt < 2) {
+        // 409 = unique constraint violation (version already exists)
+        if (statusCode === 409 && attempt < 2) {
           console.warn(`[useCheckpoint] Version conflict (attempt ${attempt + 1}), retrying…`);
           continue;
         }
 
-        console.error("[useCheckpoint] Insert error:", insertError?.message);
+        console.error("[useCheckpoint] Insert error:", insertError);
         setError("Failed to save checkpoint.");
         return null;
       }
@@ -161,13 +160,15 @@ export function useCheckpoint(): UseCheckpointReturn {
       }
 
       // Update latest_checkpoint_id on the site spec
-      const { error: updateError } = await supabase
-        .from("site_specs")
-        .update({ latest_checkpoint_id: checkpoint.id })
-        .eq("id", siteSpecId);
+      const { error: updateError } = await postgrestBypass({
+        table: "site_specs",
+        method: "PATCH",
+        queryParams: `id=eq.${siteSpecId}`,
+        body: { latest_checkpoint_id: checkpoint.id },
+      });
 
       if (updateError) {
-        console.error("[useCheckpoint] Failed to update latest_checkpoint_id:", updateError.message);
+        console.error("[useCheckpoint] Failed to update latest_checkpoint_id:", updateError);
       }
 
       // Prepend to local state
@@ -183,18 +184,17 @@ export function useCheckpoint(): UseCheckpointReturn {
       setError(null);
 
       // Fetch the checkpoint
-      const { data: checkpoint, error: fetchError } = await supabase
-        .from("site_checkpoints")
-        .select("*")
-        .eq("id", checkpointId)
-        .single();
+      const { data: cpRows, error: fetchError } = await postgrestBypass<CheckpointRow[]>({
+        table: "site_checkpoints",
+        queryParams: `select=*&id=eq.${checkpointId}`,
+      });
 
-      if (fetchError || !checkpoint) {
+      if (fetchError || !cpRows?.[0]) {
         setError("Checkpoint not found.");
         return false;
       }
 
-      const typedCheckpoint = toCheckpoint(checkpoint as CheckpointRow);
+      const typedCheckpoint = toCheckpoint(cpRows[0]);
       const htmlPages = typedCheckpoint.html_pages.pages;
 
       // Build files array for the build Edge Function
@@ -206,14 +206,14 @@ export function useCheckpoint(): UseCheckpointReturn {
       );
 
       // Generate sitemap and robots.txt
-      const { data: spec } = await supabase
-        .from("site_specs")
-        .select("subdomain_slug")
-        .eq("id", siteSpecId)
-        .single();
+      const { data: specRows } = await postgrestBypass<Array<{ subdomain_slug: string | null }>>({
+        table: "site_specs",
+        queryParams: `select=subdomain_slug&id=eq.${siteSpecId}`,
+      });
 
-      const baseUrl = spec?.subdomain_slug
-        ? `https://${spec.subdomain_slug}.birthbuild.com`
+      const slug = specRows?.[0]?.subdomain_slug;
+      const baseUrl = slug
+        ? `https://${slug}.birthbuild.com`
         : "https://example.birthbuild.com";
 
       files.push({

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { AdminShell } from "@/components/admin/AdminShell";
 import { Button } from "@/components/ui/Button";
-import { supabase } from "@/lib/supabase";
+import { invokeEdgeFunction } from "@/lib/edge-functions";
 
 interface InviteResult {
   magic_link: string;
@@ -23,18 +23,23 @@ export default function AdminInstructorsPage() {
     setSubmitting(true);
 
     try {
-      const { data, error: fnError } = await supabase.functions.invoke(
-        "invite-instructor",
-        { body: { email: email.trim().toLowerCase(), org_name: orgName.trim() } },
-      );
+      const { data, error: fnError } = await invokeEdgeFunction<{
+        magic_link?: string;
+        error?: string;
+      }>("invite-instructor", { email: email.trim().toLowerCase(), org_name: orgName.trim() });
 
       if (fnError) {
-        setError(fnError.message || "Failed to invite instructor.");
+        setError(fnError);
         return;
       }
 
       if (data?.error) {
         setError(data.error);
+        return;
+      }
+
+      if (!data?.magic_link) {
+        setError("Failed to invite instructor.");
         return;
       }
 

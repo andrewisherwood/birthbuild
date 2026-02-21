@@ -1,5 +1,5 @@
 import { useState, useCallback } from "react";
-import { invokeEdgeFunctionBypass } from "@/lib/auth-bypass";
+import { invokeEdgeFunction } from "@/lib/edge-functions";
 import { logEvent } from "@/lib/log-event";
 import type { SiteSpec } from "@/types/site-spec";
 
@@ -28,7 +28,7 @@ export function usePublish(siteSpec: SiteSpec | null, options?: UsePublishOption
     setPublishError(null);
 
     try {
-      const { data, error } = await invokeEdgeFunctionBypass<{
+      const { data, error } = await invokeEdgeFunction<{
         success?: boolean;
         error?: string;
         deploy_url?: string;
@@ -66,7 +66,7 @@ export function usePublish(siteSpec: SiteSpec | null, options?: UsePublishOption
     setPublishError(null);
 
     try {
-      const { data, error } = await invokeEdgeFunctionBypass<{
+      const { data, error } = await invokeEdgeFunction<{
         success?: boolean;
         error?: string;
       }>("publish", { site_spec_id: siteSpec.id, action: "unpublish" });

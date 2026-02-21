@@ -14,7 +14,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { supabase } from "@/lib/supabase";
-import { getAccessTokenDirect, invokeEdgeFunctionBypass, postgrestBypass } from "@/lib/auth-bypass";
+import { invokeEdgeFunction } from "@/lib/edge-functions";
 import { generateSite } from "@/lib/site-generator";
 import { getPaletteColours, meetsContrastAA } from "@/lib/palettes";
 import { generateRobotsTxt, generateSitemap } from "@/lib/seo-files";
@@ -66,15 +66,13 @@ function validateRequiredFields(spec: SiteSpec): string[] {
 async function fetchPhotos(specId: string): Promise<{ photos: PhotoData[]; warnings: string[] }> {
   const warnings: string[] = [];
 
-  const { data: photoRows, error: photoError } = await postgrestBypass<
-    Array<{ purpose: string; storage_path: string; alt_text: string }>
-  >({
-    table: "photos",
-    queryParams: `select=purpose,storage_path,alt_text&site_spec_id=eq.${specId}`,
-  });
+  const { data: photoRows, error: photoError } = await supabase
+    .from("photos")
+    .select("purpose, storage_path, alt_text")
+    .eq("site_spec_id", specId);
 
   if (photoError) {
-    console.error("[useBuild] Failed to fetch photos:", photoError);
+    console.error("[useBuild] Failed to fetch photos:", photoError.message);
   }
 
   // Use public URLs with Supabase Image Transforms (Pro plan).
@@ -82,7 +80,7 @@ async function fetchPhotos(specId: string): Promise<{ photos: PhotoData[]; warni
   // in deployed sites. Transforms cap images at 1200px wide with
   // quality 80, typically reducing 2MB+ originals to ~100-150KB.
   // Supabase auto-converts to WebP for supported browsers.
-  const rows = photoRows ?? [];
+  const rows = (photoRows ?? []) as Array<{ purpose: string; storage_path: string; alt_text: string }>;
 
   const photos: PhotoData[] = rows.map((row) => {
     const path = String(row.storage_path ?? "");
@@ -107,40 +105,6 @@ async function fetchPhotos(specId: string): Promise<{ photos: PhotoData[]; warni
 
   return { photos, warnings };
 }
-
-// ---------------------------------------------------------------------------
-// Session validation
-// ---------------------------------------------------------------------------
-
-/**
- * Ensure we have a valid access token.
- *
- * Uses getAccessTokenDirect() which reads from localStorage and refreshes
- * via raw fetch — completely bypassing the SDK's auth lock that can hang
- * when corrupted by React 18 double-mounts or WebSocket reconnection races.
- */
-async function ensureValidSession(): Promise<
-  { valid: true; accessToken: string } | { valid: false; reason: string }
-> {
-  const accessToken = await getAccessTokenDirect();
-
-  if (!accessToken) {
-    return {
-      valid: false,
-      reason: "Your session has expired. Please sign out and sign back in.",
-    };
-  }
-
-  return { valid: true, accessToken };
-}
-
-// ---------------------------------------------------------------------------
-// Direct edge function invocation (bypasses SDK session handling)
-// ---------------------------------------------------------------------------
-
-// invokeEdgeFunctionBypass is now provided by @/lib/auth-bypass as
-// invokeEdgeFunctionBypass — wraps getAccessTokenDirect() + raw fetch
-// so every edge function call is fully SDK-independent.
 
 // ---------------------------------------------------------------------------
 // Hook
@@ -244,15 +208,6 @@ export function useBuild(siteSpec: SiteSpec | null): UseBuildReturn {
       return;
     }
 
-    // Ensure we have a valid session for edge function calls
-    const sessionCheck = await ensureValidSession();
-    if (!sessionCheck.valid) {
-      setBuildError(sessionCheck.reason);
-      return;
-    }
-    // accessToken is used below only as a pre-check; actual edge function
-    // calls use invokeEdgeFunctionBypass which obtains its own token.
-
     setBuildError(null);
     setBuilding(true);
     setValidationWarnings([]);
@@ -284,7 +239,7 @@ export function useBuild(siteSpec: SiteSpec | null): UseBuildReturn {
       files.push({ path: "robots.txt", content: site.robots });
       files.push({ path: "llms.txt", content: site.llmsTxt });
 
-      const { data, error } = await invokeEdgeFunctionBypass<{
+      const { data, error } = await invokeEdgeFunction<{
         success?: boolean;
         error?: string;
       }>("build", { site_spec_id: spec.id, files });
@@ -299,6 +254,30 @@ export function useBuild(siteSpec: SiteSpec | null): UseBuildReturn {
       if (data?.error) {
         setBuildError(data.error);
         logEvent("build_failed", { mode: "template", error: data.error }, { siteSpecId: spec.id, userId: spec.user_id });
+        setBuilding(false);
+        return;
+      }
+
+      // Realtime should normally deliver this, but fetch once as a fallback so
+      // the UI never stays in a stale "building" state.
+      const { data: updatedRows } = await supabase
+        .from("site_specs")
+        .select("status, deploy_url, preview_url, subdomain_slug")
+        .eq("id", spec.id)
+        .limit(1);
+      const updatedSpec = updatedRows?.[0] ?? null;
+
+      if (updatedSpec) {
+        setLastBuildStatus({
+          status: String(updatedSpec.status ?? "preview") as SiteSpecStatus,
+          deploy_url: updatedSpec.deploy_url ? String(updatedSpec.deploy_url) : null,
+          preview_url: updatedSpec.preview_url ? String(updatedSpec.preview_url) : null,
+          subdomain_slug: updatedSpec.subdomain_slug ? String(updatedSpec.subdomain_slug) : null,
+        });
+        if (updatedSpec.status !== "building") {
+          setBuilding(false);
+        }
+      } else {
         setBuilding(false);
       }
     } catch (err: unknown) {
@@ -331,15 +310,7 @@ export function useBuild(siteSpec: SiteSpec | null): UseBuildReturn {
       return;
     }
 
-    // Ensure we have a valid session for edge function calls
-    console.log("[useBuild] Checking session validity…");
-    const sessionCheck = await ensureValidSession();
-    if (!sessionCheck.valid) {
-      console.warn("[useBuild] Session invalid:", sessionCheck.reason);
-      setBuildError(sessionCheck.reason);
-      return;
-    }
-    console.log("[useBuild] Session valid, starting LLM build…");
+    console.log("[useBuild] Starting LLM build…");
 
     setBuildError(null);
     setBuilding(true);
@@ -360,7 +331,7 @@ export function useBuild(siteSpec: SiteSpec | null): UseBuildReturn {
       console.log("[useBuild] Calling generate-design-system…");
       setProgress("design-system");
 
-      const { data: dsData, error: dsError } = await invokeEdgeFunctionBypass<{
+      const { data: dsData, error: dsError } = await invokeEdgeFunction<{
         success?: boolean;
         css?: string;
         nav_html?: string;
@@ -399,9 +370,7 @@ export function useBuild(siteSpec: SiteSpec | null): UseBuildReturn {
 
       // 3. Generate pages in parallel
       //
-      // Re-validate the session before page generation. The design-system
-      // No need for an explicit session re-check: invokeEdgeFunctionBypass
-      // reads the token from localStorage and refreshes automatically.
+      // Generate pages in parallel; each invocation has its own timeout guard.
 
       const pagesToGenerate = spec.pages.filter((p) => {
         if (p === "testimonials" && spec.testimonials.length === 0) return false;
@@ -414,7 +383,7 @@ export function useBuild(siteSpec: SiteSpec | null): UseBuildReturn {
 
       const generateSinglePage = async (page: string): Promise<CheckpointPage> => {
         console.log("[useBuild] Calling generate-page for '%s'…", page);
-        const { data, error } = await invokeEdgeFunctionBypass<{
+        const { data, error } = await invokeEdgeFunction<{
           filename?: string;
           html?: string;
           error?: string;
@@ -504,41 +473,46 @@ export function useBuild(siteSpec: SiteSpec | null): UseBuildReturn {
 
       let checkpointId: string | null = null;
       for (let attempt = 0; attempt < 3; attempt++) {
-        const { data: versionRows } = await postgrestBypass<Array<{ version: number }>>({
-          table: "site_checkpoints",
-          queryParams: `select=version&site_spec_id=eq.${spec.id}&order=version.desc&limit=1`,
-        });
+        const { data: versionRows, error: versionError } = await supabase
+          .from("site_checkpoints")
+          .select("version")
+          .eq("site_spec_id", spec.id)
+          .order("version", { ascending: false })
+          .limit(1);
+
+        if (versionError) {
+          console.error("[useBuild] Failed to read checkpoint versions:", versionError.message);
+          setBuildError("Failed to save checkpoint. Please try again.");
+          setProgress("error", 0, 0, "Checkpoint save failed.");
+          setBuilding(false);
+          return;
+        }
 
         const nextVersion = (versionRows?.[0]?.version ?? 0) + 1;
 
-        const { data: cpRows, error: cpError, statusCode } = await postgrestBypass<
-          Array<{ id: string }>
-        >({
-          table: "site_checkpoints",
-          method: "POST",
-          queryParams: "select=id",
-          body: {
+        const { data: cpRows, error: cpError } = await supabase
+          .from("site_checkpoints")
+          .insert({
             site_spec_id: spec.id,
             version: nextVersion,
             html_pages: { pages: generatedPages },
             design_system: designSystem,
             label: `AI build v${nextVersion}`,
-          },
-          headers: { Prefer: "return=representation" },
-        });
+          })
+          .select("id");
 
         if (!cpError && cpRows?.[0]) {
           checkpointId = cpRows[0].id;
           break;
         }
 
-        // 409 = unique constraint violation (version already exists)
-        if (statusCode === 409 && attempt < 2) {
+        // 23505 = unique constraint violation (version already exists)
+        if (cpError?.code === "23505" && attempt < 2) {
           console.warn(`[useBuild] Version conflict (attempt ${attempt + 1}), retrying…`);
           continue;
         }
 
-        console.error("[useBuild] Checkpoint save error:", cpError);
+        console.error("[useBuild] Checkpoint save error:", cpError?.message ?? "Unknown error");
         setBuildError("Failed to save checkpoint. Your pages were generated but not saved.");
         setProgress("error", 0, 0, "Checkpoint save failed.");
         setBuilding(false);
@@ -553,15 +527,13 @@ export function useBuild(siteSpec: SiteSpec | null): UseBuildReturn {
       }
 
       // Update latest_checkpoint_id
-      const { error: cpLinkError } = await postgrestBypass({
-        table: "site_specs",
-        method: "PATCH",
-        queryParams: `id=eq.${spec.id}`,
-        body: { latest_checkpoint_id: checkpointId },
-      });
+      const { error: cpLinkError } = await supabase
+        .from("site_specs")
+        .update({ latest_checkpoint_id: checkpointId })
+        .eq("id", spec.id);
 
       if (cpLinkError) {
-        console.error("[useBuild] Failed to update latest_checkpoint_id:", cpLinkError);
+        console.error("[useBuild] Failed to update latest_checkpoint_id:", cpLinkError.message);
       }
 
       // 5. Generate sitemap + robots and deploy
@@ -580,7 +552,7 @@ export function useBuild(siteSpec: SiteSpec | null): UseBuildReturn {
       files.push({ path: "robots.txt", content: generateRobotsTxt(baseUrl) });
       files.push({ path: "llms.txt", content: generateLlmsTxt(spec) });
 
-      const { data: buildData, error: buildErr } = await invokeEdgeFunctionBypass<{
+      const { data: buildData, error: buildErr } = await invokeEdgeFunction<{
         success?: boolean;
         error?: string;
       }>("build", { site_spec_id: spec.id, files });
@@ -606,12 +578,11 @@ export function useBuild(siteSpec: SiteSpec | null): UseBuildReturn {
       logEvent("build_succeeded", { mode: "llm" }, { siteSpecId: spec.id, userId: spec.user_id });
 
       // Fetch updated spec to get deploy_url/status (don't rely solely on realtime)
-      const { data: updatedRows } = await postgrestBypass<
-        Array<{ status: string; deploy_url: string | null; preview_url: string | null; subdomain_slug: string | null }>
-      >({
-        table: "site_specs",
-        queryParams: `select=status,deploy_url,preview_url,subdomain_slug&id=eq.${spec.id}`,
-      });
+      const { data: updatedRows } = await supabase
+        .from("site_specs")
+        .select("status, deploy_url, preview_url, subdomain_slug")
+        .eq("id", spec.id)
+        .limit(1);
       const updatedSpec = updatedRows?.[0] ?? null;
 
       if (updatedSpec) {

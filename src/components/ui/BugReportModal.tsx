@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/Button";
-import { invokeEdgeFunctionBypass } from "@/lib/auth-bypass";
+import { invokeEdgeFunction } from "@/lib/edge-functions";
 
 interface BugReportModalProps {
   open: boolean;
@@ -41,7 +41,7 @@ export function BugReportModal({ open, onClose }: BugReportModalProps) {
       setSubmitting(true);
       setError(null);
 
-      const { data, error: invokeError } = await invokeEdgeFunctionBypass<{
+      const { data, error: invokeError } = await invokeEdgeFunction<{
         success?: boolean;
         error?: string;
       }>("report-bug", {

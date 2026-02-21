@@ -6,7 +6,7 @@
  * in the Edge Function. The client only sends messages.
  */
 
-import { invokeEdgeFunctionBypass } from "@/lib/auth-bypass";
+import { invokeEdgeFunction } from "@/lib/edge-functions";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -61,7 +61,7 @@ interface SendDesignChatMessageParams {
 export async function sendChatMessage({
   messages,
 }: SendChatMessageParams): Promise<ClaudeResponse> {
-  const { data, error } = await invokeEdgeFunctionBypass<ClaudeResponse>(
+  const { data, error } = await invokeEdgeFunction<ClaudeResponse>(
     "chat",
     { messages },
   );
@@ -85,7 +85,7 @@ export async function sendDesignChatMessage({
   messages,
   currentDesign,
 }: SendDesignChatMessageParams): Promise<ClaudeResponse> {
-  const { data, error } = await invokeEdgeFunctionBypass<ClaudeResponse>(
+  const { data, error } = await invokeEdgeFunction<ClaudeResponse>(
     "design-chat",
     { messages, current_design: currentDesign },
   );

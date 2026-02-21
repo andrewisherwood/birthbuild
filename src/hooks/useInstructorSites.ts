@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
+import { invokeEdgeFunction } from "@/lib/edge-functions";
 import { useAuth } from "@/hooks/useAuth";
 import type { SiteSpec } from "@/types/site-spec";
 
@@ -88,21 +89,17 @@ export function useInstructorSites(): UseInstructorSitesReturn {
     setError(null);
 
     try {
-      const { data, error: invokeError } = await supabase.functions.invoke(
-        "delete-site",
-        { body: { site_spec_id: siteId } },
-      );
+      const { data, error: invokeError } = await invokeEdgeFunction<{
+        success?: boolean;
+        error?: string;
+      }>("delete-site", { site_spec_id: siteId });
 
       if (invokeError) {
-        const message =
-          typeof invokeError === "object" && invokeError !== null && "message" in invokeError
-            ? (invokeError as { message: string }).message
-            : "Failed to delete site.";
-        setError(message);
+        setError(invokeError);
         return;
       }
 
-      const response = data as { success?: boolean; error?: string } | undefined;
+      const response = data ?? undefined;
       if (response?.error) {
         setError(response.error);
         return;

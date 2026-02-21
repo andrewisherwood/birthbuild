@@ -61,18 +61,40 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   useEffect(() => {
     let mounted = true;
+    let profileRequestVersion = 0;
+
+    const loadProfile = async (nextSession: Session, requestVersion: number) => {
+      try {
+        const nextProfile = await fetchProfile(nextSession.user.id);
+        if (!mounted || requestVersion !== profileRequestVersion) return;
+        setProfile(nextProfile);
+        setRole(nextProfile?.role ?? null);
+      } catch {
+        if (!mounted || requestVersion !== profileRequestVersion) return;
+        setProfile(null);
+        setRole(null);
+      } finally {
+        if (mounted && requestVersion === profileRequestVersion) {
+          setLoading(false);
+        }
+      }
+    };
 
     // Use onAuthStateChange as the sole session source.
     // INITIAL_SESSION fires after the client has fully initialised
     // (including hash-token processing for magic-link redirects).
     // This avoids a redundant getSession() call that can race with
     // onAuthStateChange's own internal session initialisation.
+    //
+    // IMPORTANT: keep this callback synchronous. Supabase auth invokes it
+    // under an internal lock; awaiting SDK calls here can deadlock.
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (event, newSession) => {
+    } = supabase.auth.onAuthStateChange((event, newSession) => {
       if (!mounted) return;
 
-      if (event === "SIGNED_OUT") {
+      if (event === "SIGNED_OUT" || !newSession?.user) {
+        profileRequestVersion += 1;
         setSession(null);
         setUser(null);
         setProfile(null);
@@ -82,27 +104,18 @@ export function AuthProvider({ children }: AuthProviderProps) {
       }
 
       // INITIAL_SESSION, SIGNED_IN, TOKEN_REFRESHED, etc.
-      // Collect profile data before updating state so React batches
-      // everything into a single re-render.
-      let newProfile: Profile | null = null;
-      let newRole: UserRole = null;
-
-      if (newSession?.user) {
-        try {
-          newProfile = await fetchProfile(newSession.user.id);
-          newRole = newProfile?.role ?? null;
-        } catch {
-          // Profile fetch failed — continue without profile.
-        }
-      }
-
-      if (!mounted) return;
-
+      profileRequestVersion += 1;
+      const requestVersion = profileRequestVersion;
       setSession(newSession);
-      setUser(newSession?.user ?? null);
-      setProfile(newProfile);
-      setRole(newRole);
-      setLoading(false);
+      setUser(newSession.user);
+      setLoading(true);
+
+      // Defer profile read until after the auth callback returns, otherwise
+      // the nested SDK query can contend on Supabase auth's internal lock.
+      setTimeout(() => {
+        if (!mounted) return;
+        void loadProfile(newSession, requestVersion);
+      }, 0);
     });
 
     return () => {
@@ -138,10 +151,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     // A failed signOut must never leave the user in a ghost session
     // where the server session is cleared but the UI still shows as
     // authenticated (causing RLS to block every subsequent query).
-    //
-    // The 5s timeout guards against supabase.auth.signOut() hanging
-    // (observed with the no-op navigator.locks override when the
-    // underlying HTTP request stalls).
+    // The 5s timeout guards against a stalled network request.
     try {
       await Promise.race([
         supabase.auth.signOut(),

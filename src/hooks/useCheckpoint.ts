@@ -7,7 +7,8 @@
  */
 
 import { useState, useCallback, useEffect } from "react";
-import { invokeEdgeFunctionBypass, postgrestBypass } from "@/lib/auth-bypass";
+import { supabase } from "@/lib/supabase";
+import { invokeEdgeFunction } from "@/lib/edge-functions";
 import type {
   SiteCheckpoint,
   CheckpointPage,
@@ -85,19 +86,20 @@ export function useCheckpoint(): UseCheckpointReturn {
     setLoading(true);
     setError(null);
 
-    const { data, error: fetchError } = await postgrestBypass<CheckpointRow[]>({
-      table: "site_checkpoints",
-      queryParams: `select=*&site_spec_id=eq.${siteSpecId}&order=version.desc`,
-    });
+    const { data, error: fetchError } = await supabase
+      .from("site_checkpoints")
+      .select("*")
+      .eq("site_spec_id", siteSpecId)
+      .order("version", { ascending: false });
 
     if (fetchError) {
-      console.error("[useCheckpoint] Fetch error:", fetchError);
+      console.error("[useCheckpoint] Fetch error:", fetchError.message);
       setError("Failed to load checkpoints.");
       setLoading(false);
       return;
     }
 
-    setCheckpoints((data ?? []).map((row) => toCheckpoint(row)));
+    setCheckpoints((data ?? []).map((row) => toCheckpoint(row as CheckpointRow)));
     setLoading(false);
   }, []);
 
@@ -115,41 +117,44 @@ export function useCheckpoint(): UseCheckpointReturn {
       // on conflict we re-read the max version and retry (up to 3 attempts).
       let checkpoint: SiteCheckpoint | null = null;
       for (let attempt = 0; attempt < 3; attempt++) {
-        const { data: versionRows } = await postgrestBypass<Array<{ version: number }>>({
-          table: "site_checkpoints",
-          queryParams: `select=version&site_spec_id=eq.${siteSpecId}&order=version.desc&limit=1`,
-        });
+        const { data: versionRows, error: versionError } = await supabase
+          .from("site_checkpoints")
+          .select("version")
+          .eq("site_spec_id", siteSpecId)
+          .order("version", { ascending: false })
+          .limit(1);
+
+        if (versionError) {
+          console.error("[useCheckpoint] Failed to read checkpoint versions:", versionError.message);
+          setError("Failed to save checkpoint.");
+          return null;
+        }
 
         const nextVersion = (versionRows?.[0]?.version ?? 0) + 1;
 
-        const { data: insertRows, error: insertError, statusCode } = await postgrestBypass<
-          CheckpointRow[]
-        >({
-          table: "site_checkpoints",
-          method: "POST",
-          queryParams: "select=*",
-          body: {
+        const { data: insertRows, error: insertError } = await supabase
+          .from("site_checkpoints")
+          .insert({
             site_spec_id: siteSpecId,
             version: nextVersion,
             html_pages: { pages },
             design_system: designSystem ?? null,
             label: label ?? null,
-          },
-          headers: { Prefer: "return=representation" },
-        });
+          })
+          .select("*");
 
         if (!insertError && insertRows?.[0]) {
-          checkpoint = toCheckpoint(insertRows[0]);
+          checkpoint = toCheckpoint(insertRows[0] as CheckpointRow);
           break;
         }
 
-        // 409 = unique constraint violation (version already exists)
-        if (statusCode === 409 && attempt < 2) {
+        // 23505 = unique constraint violation (version already exists)
+        if (insertError?.code === "23505" && attempt < 2) {
           console.warn(`[useCheckpoint] Version conflict (attempt ${attempt + 1}), retrying…`);
           continue;
         }
 
-        console.error("[useCheckpoint] Insert error:", insertError);
+        console.error("[useCheckpoint] Insert error:", insertError?.message ?? "Unknown error");
         setError("Failed to save checkpoint.");
         return null;
       }
@@ -160,15 +165,13 @@ export function useCheckpoint(): UseCheckpointReturn {
       }
 
       // Update latest_checkpoint_id on the site spec
-      const { error: updateError } = await postgrestBypass({
-        table: "site_specs",
-        method: "PATCH",
-        queryParams: `id=eq.${siteSpecId}`,
-        body: { latest_checkpoint_id: checkpoint.id },
-      });
+      const { error: updateError } = await supabase
+        .from("site_specs")
+        .update({ latest_checkpoint_id: checkpoint.id })
+        .eq("id", siteSpecId);
 
       if (updateError) {
-        console.error("[useCheckpoint] Failed to update latest_checkpoint_id:", updateError);
+        console.error("[useCheckpoint] Failed to update latest_checkpoint_id:", updateError.message);
       }
 
       // Prepend to local state
@@ -184,17 +187,18 @@ export function useCheckpoint(): UseCheckpointReturn {
       setError(null);
 
       // Fetch the checkpoint
-      const { data: cpRows, error: fetchError } = await postgrestBypass<CheckpointRow[]>({
-        table: "site_checkpoints",
-        queryParams: `select=*&id=eq.${checkpointId}`,
-      });
+      const { data: cpRows, error: fetchError } = await supabase
+        .from("site_checkpoints")
+        .select("*")
+        .eq("id", checkpointId)
+        .limit(1);
 
       if (fetchError || !cpRows?.[0]) {
         setError("Checkpoint not found.");
         return false;
       }
 
-      const typedCheckpoint = toCheckpoint(cpRows[0]);
+      const typedCheckpoint = toCheckpoint(cpRows[0] as CheckpointRow);
       const htmlPages = typedCheckpoint.html_pages.pages;
 
       // Build files array for the build Edge Function
@@ -206,10 +210,11 @@ export function useCheckpoint(): UseCheckpointReturn {
       );
 
       // Generate sitemap and robots.txt
-      const { data: specRows } = await postgrestBypass<Array<{ subdomain_slug: string | null }>>({
-        table: "site_specs",
-        queryParams: `select=subdomain_slug&id=eq.${siteSpecId}`,
-      });
+      const { data: specRows } = await supabase
+        .from("site_specs")
+        .select("subdomain_slug")
+        .eq("id", siteSpecId)
+        .limit(1);
 
       const slug = specRows?.[0]?.subdomain_slug;
       const baseUrl = slug
@@ -225,8 +230,7 @@ export function useCheckpoint(): UseCheckpointReturn {
         content: generateRobotsTxt(baseUrl),
       });
 
-      // Call build Edge Function (bypass SDK to avoid auth-lock hangs)
-      const { error: buildErr } = await invokeEdgeFunctionBypass<{
+      const { error: buildErr } = await invokeEdgeFunction<{
         success?: boolean;
         error?: string;
       }>("build", { site_spec_id: siteSpecId, files });

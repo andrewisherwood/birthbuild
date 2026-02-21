@@ -11,7 +11,7 @@
  */
 
 import { useState, useCallback, useRef } from "react";
-import { invokeEdgeFunctionBypass } from "@/lib/auth-bypass";
+import { invokeEdgeFunction } from "@/lib/edge-functions";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { extractSection, replaceSection, getSectionNames } from "@/lib/section-parser";
@@ -145,8 +145,7 @@ export function SiteEditChat({
 
         addMessage("assistant", `Editing the "${targetSection}" section...`);
 
-        // Call edit-section Edge Function (bypass SDK to avoid auth-lock hangs)
-        const { data, error } = await invokeEdgeFunctionBypass<{
+        const { data, error } = await invokeEdgeFunction<{
           success?: boolean;
           edited_html?: string;
           error?: string;

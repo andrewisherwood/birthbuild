@@ -105,7 +105,7 @@ birthbuild/
 │   │       └── UsageMetrics.tsx
 │   ├── lib/
 │   │   ├── supabase.ts            # Supabase client init
-│   │   ├── auth-bypass.ts         # SDK bypass for Edge Functions + Storage (avoids auth lock hangs)
+│   │   ├── edge-functions.ts      # Edge Function invoke helper (SDK + timeout + error parsing)
 │   │   ├── density-score.ts       # Spec density scoring algorithm
 │   │   ├── design-tokens.ts       # Spacing, border-radius, typography scale token definitions
 │   │   ├── claude.ts              # Claude API call helpers (via Edge Function)
@@ -223,9 +223,10 @@ birthbuild/
   - **Hero overlay** — Hero photo (purpose `hero`) renders as full-bleed background with dark gradient overlay (`rgba(0,0,0,0.55)` → `rgba(0,0,0,0.15)`) and white text/CTA on top. Falls back to `.hero--text-only` text-only hero when no hero photo exists. CSS classes: `.hero`, `.hero__bg`, `.hero__overlay`, `.hero__content`, `.hero__tagline`, `.btn--hero`.
   - **Service cards with images** — Gallery photos (purpose `gallery`) distributed across the first 3 homepage service preview cards. Cards with images use `.card--service` (zero-padding flex column with overflow hidden), `.card__image` (200px height, cover, hover scale), `.card__body` (padded text), `.card__link` (CTA-coloured arrow). Falls back to plain `.card` when no gallery photos.
   - **SVG social icons** — Footer social links render as inline SVG icons (Facebook, Instagram, TikTok, LinkedIn, X/Twitter + generic globe fallback) inside 44×44px circular buttons. `aria-label` on each `<a>`, `aria-hidden="true"` on each SVG. Hover lifts with `translateY(-2px)`. Defined in `SOCIAL_ICONS` map in `shared.ts`.
-- **SDK auth bypass** — `auth-bypass.ts` provides raw `fetch()` wrappers that bypass the Supabase SDK's auth lock (which hangs under React 18 Strict Mode double-mounts): `invokeEdgeFunctionBypass()` for Edge Functions, `uploadStorageBypass()`/`removeStorageBypass()` for Storage uploads/deletes, and `getPublicStorageUrl()` for public bucket URLs. All client-side Supabase API calls (Edge Functions, Storage writes) must use these bypasses — never use `supabase.functions.invoke()` or `supabase.storage.upload()`/`remove()` directly.
-- **10-second loading backstop** — All data-fetching hooks (`useSiteSpec`, `usePhotoUpload`, `useCheckpoint`) cap their loading state at 10 seconds to prevent permanent spinners from SDK hangs.
-- **Public photos bucket** — Photos bucket is public for permanent image URLs via `getPublicStorageUrl()`. No signed URLs needed. Supabase Image Transforms (Pro plan) resize to 1200px wide, quality 80, auto WebP. Upload/delete policies remain scoped to authenticated users.
+- **SDK-first Supabase access** — Use the Supabase SDK for auth, database, storage, realtime, and Edge Function calls. Do not reintroduce localStorage token parsing or raw fetch bypasses for these paths.
+- **Auth stability guardrail (DO NOT CHANGE LIGHTLY)** — Keep `onAuthStateChange` callbacks synchronous. Never run awaited Supabase SDK calls inside those callbacks. Do not override `auth.lock` in `createClient` unless the replacement fully implements Supabase lock timeout semantics (`acquireTimeout`) and cross-tab safety.
+- **10-second loading backstop** — Data-fetching hooks (`useSiteSpec`, `usePhotoUpload`, `useCheckpoint`) cap loading state at 10 seconds to prevent permanent spinners if requests stall.
+- **Public photos bucket** — Photos bucket is public for permanent image URLs via `supabase.storage.from("photos").getPublicUrl(...)`. No signed URLs needed. Supabase Image Transforms (Pro plan) resize to 1200px wide, quality 80, auto WebP. Upload/delete policies remain scoped to authenticated users.
 - **Edge Function JWT handling** — All Edge Functions are deployed with `verify_jwt: false` (Supabase gateway JWT validation disabled) because the gateway intermittently rejects valid tokens. Each function validates the JWT internally via `edge-helpers.ts`. This is defence-in-depth: the function-level auth is the primary gate.
 - **Chat edge function limits** — `max_tokens: 4096` for Claude API output. Per-message length validation (`MAX_MESSAGE_LENGTH = 4_000`) only applies to user messages — assistant messages legitimately contain generated bios/content that exceed this. Total payload capped at 100KB.
 - **DB-backed rate limiting** — `check_rate_limit` RPC atomically upserts counters with sliding window expiry. Replaces in-memory Maps that reset on cold starts. Fails open if DB call errors.

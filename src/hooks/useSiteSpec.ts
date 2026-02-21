@@ -11,6 +11,7 @@ interface UseSiteSpecReturn {
   patchLocal: (partial: Partial<SiteSpec>) => void;
   updateSiteSpec: (partial: Partial<SiteSpec>) => Promise<void>;
   createSiteSpec: () => Promise<SiteSpec | null>;
+  refreshSpec: () => Promise<void>;
 }
 
 export function useSiteSpec(siteId?: string): UseSiteSpecReturn {
@@ -76,6 +77,25 @@ export function useSiteSpec(siteId?: string): UseSiteSpecReturn {
     return () => {
       mounted = false;
     };
+  }, [userId, siteId]);
+
+  const refreshSpec = useCallback(async () => {
+    if (!userId) return;
+
+    let query = supabase.from("site_specs").select("*").eq("user_id", userId);
+    if (siteId) {
+      query = query.eq("id", siteId);
+    } else {
+      query = query.order("created_at", { ascending: false }).limit(1);
+    }
+    const { data, error: fetchError } = await query.maybeSingle();
+
+    if (fetchError) {
+      setError(fetchError.message);
+      return;
+    }
+
+    setSiteSpec(data as SiteSpec | null);
   }, [userId, siteId]);
 
   // Record the updated_at timestamp when a build starts (status -> building)
@@ -198,5 +218,6 @@ export function useSiteSpec(siteId?: string): UseSiteSpecReturn {
     patchLocal,
     updateSiteSpec,
     createSiteSpec,
+    refreshSpec,
   };
 }

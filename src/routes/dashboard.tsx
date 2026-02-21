@@ -19,7 +19,7 @@ export default function DashboardPage() {
   const { user, profile, loading: authLoading } = useAuth();
   const [searchParams] = useSearchParams();
   const siteId = searchParams.get("site_id") ?? undefined;
-  const { siteSpec, loading: specLoading, error, isStale, patchLocal, updateSiteSpec } = useSiteSpec(siteId);
+  const { siteSpec, loading: specLoading, error, isStale, patchLocal, updateSiteSpec, refreshSpec } = useSiteSpec(siteId);
   const { photos } = usePhotoUpload(siteSpec?.id ?? null);
   const { debouncedUpdate } = useDebouncedSave({ updateSiteSpec, patchLocal });
 
@@ -82,7 +82,7 @@ export default function DashboardPage() {
       case "seo":
         return <SeoTab siteSpec={spec} onFieldChange={debouncedUpdate} />;
       case "preview":
-        return <PreviewTab siteSpec={spec} onFieldChange={debouncedUpdate} isStale={isStale} />;
+        return <PreviewTab siteSpec={spec} onFieldChange={debouncedUpdate} isStale={isStale} refreshSpec={refreshSpec} />;
       case "editor":
         return <SiteEditorTab siteSpec={spec} />;
     }

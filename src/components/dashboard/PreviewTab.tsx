@@ -17,6 +17,7 @@ interface PreviewTabProps {
   siteSpec: SiteSpec;
   onFieldChange: (partial: Partial<SiteSpec>) => void;
   isStale?: boolean;
+  refreshSpec?: () => Promise<void>;
 }
 
 // ---------------------------------------------------------------------------
@@ -152,7 +153,7 @@ const DEVICE_LABELS: Record<DeviceSize, string> = {
 // Component
 // ---------------------------------------------------------------------------
 
-export function PreviewTab({ siteSpec, onFieldChange, isStale = false }: PreviewTabProps) {
+export function PreviewTab({ siteSpec, onFieldChange, isStale = false, refreshSpec }: PreviewTabProps) {
   const summary = buildSummary(siteSpec);
   const {
     building,
@@ -163,7 +164,11 @@ export function PreviewTab({ siteSpec, onFieldChange, isStale = false }: Preview
     lastBuildStatus,
     validationWarnings,
   } = useBuild(siteSpec);
-  const { publishing, publishError, publish, unpublish } = usePublish(siteSpec);
+  const { publishing, publishError, publish, unpublish } = usePublish(siteSpec, {
+    onComplete: () => {
+      if (refreshSpec) void refreshSpec();
+    },
+  });
   const [deviceSize, setDeviceSize] = useState<DeviceSize>("desktop");
 
   const currentStatus = lastBuildStatus?.status ?? siteSpec.status;

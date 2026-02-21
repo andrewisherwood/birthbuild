@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useRef, useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
@@ -27,6 +27,38 @@ export function PhotoUploadCard({
 }: PhotoUploadCardProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [dragOver, setDragOver] = useState(false);
+  const [localAltText, setLocalAltText] = useState(photo?.alt_text ?? "");
+  const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Sync local state if the photo prop changes (e.g. a different photo loads)
+  useEffect(() => {
+    setLocalAltText(photo?.alt_text ?? "");
+  }, [photo?.id, photo?.alt_text]);
+
+  const handleAltTextChange = useCallback(
+    (value: string) => {
+      setLocalAltText(value);
+      if (debounceTimer.current) {
+        clearTimeout(debounceTimer.current);
+      }
+      debounceTimer.current = setTimeout(() => {
+        debounceTimer.current = null;
+        if (photo) {
+          void onAltTextChange(photo.id, value);
+        }
+      }, 500);
+    },
+    [photo, onAltTextChange],
+  );
+
+  // Cleanup timer on unmount
+  useEffect(() => {
+    return () => {
+      if (debounceTimer.current) {
+        clearTimeout(debounceTimer.current);
+      }
+    };
+  }, []);
 
   const handleFileSelect = async (file: File) => {
     await onUpload(file, purpose, "");
@@ -81,8 +113,8 @@ export function PhotoUploadCard({
           <div className="flex-1 space-y-2">
             <Input
               label="Alt text"
-              value={photo.alt_text ?? ""}
-              onChange={(value) => void onAltTextChange(photo.id, value)}
+              value={localAltText}
+              onChange={handleAltTextChange}
               placeholder="Describe this image for accessibility"
               id={`alt-text-${photo.id}`}
             />

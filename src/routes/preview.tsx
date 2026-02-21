@@ -33,8 +33,9 @@ export default function PreviewPage() {
 
   if (authLoading || specLoading) {
     return (
-      <main className="flex min-h-screen items-center justify-center">
+      <main className="flex min-h-screen flex-col items-center justify-center gap-3">
         <LoadingSpinner className="h-8 w-8" />
+        <p className="text-sm text-gray-500">Loading preview…</p>
       </main>
     );
   }

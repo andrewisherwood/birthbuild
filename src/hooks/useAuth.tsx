@@ -121,7 +121,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
       });
 
       if (error) {
-        // SEC-004: Return a generic error message instead of leaking Supabase error details.
+        // SEC-004: Return safe error messages — never leak raw Supabase error details.
+        if (error.status === 429 || error.message?.includes("rate")) {
+          return { error: "rate_limit" };
+        }
         return { error: "Unable to send magic link. Please try again." };
       }
 

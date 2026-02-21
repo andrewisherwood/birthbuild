@@ -44,8 +44,9 @@ export default function IndexPage() {
 
   if (loading) {
     return (
-      <main className="flex min-h-screen items-center justify-center">
+      <main className="flex min-h-screen flex-col items-center justify-center gap-3">
         <LoadingSpinner className="h-8 w-8" />
+        <p className="text-sm text-gray-500">Checking your session…</p>
       </main>
     );
   }
@@ -68,7 +69,11 @@ export default function IndexPage() {
     setSending(false);
 
     if (result.error) {
-      setError("Unable to send magic link. Please try again.");
+      setError(
+        result.error === "rate_limit"
+          ? "Please wait a moment before requesting another magic link."
+          : result.error,
+      );
     } else {
       setSubmitted(true);
       startCooldown();
@@ -152,7 +157,10 @@ export default function IndexPage() {
             className="flex w-full justify-center rounded-md bg-green-700 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-green-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-green-700 disabled:opacity-50"
           >
             {sending ? (
-              <LoadingSpinner className="h-5 w-5 text-white" />
+              <span className="flex items-center gap-2">
+                <LoadingSpinner className="h-5 w-5 text-white" />
+                Sending…
+              </span>
             ) : isCoolingDown ? (
               `Please wait ${cooldownRemaining}s`
             ) : (

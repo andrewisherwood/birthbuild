@@ -14,7 +14,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { supabase } from "@/lib/supabase";
-import { getAccessTokenDirect, invokeEdgeFunctionBypass } from "@/lib/auth-bypass";
+import { getAccessTokenDirect, invokeEdgeFunctionBypass, postgrestBypass } from "@/lib/auth-bypass";
 import { generateSite } from "@/lib/site-generator";
 import { getPaletteColours, meetsContrastAA } from "@/lib/palettes";
 import { generateRobotsTxt, generateSitemap } from "@/lib/seo-files";
@@ -66,13 +66,15 @@ function validateRequiredFields(spec: SiteSpec): string[] {
 async function fetchPhotos(specId: string): Promise<{ photos: PhotoData[]; warnings: string[] }> {
   const warnings: string[] = [];
 
-  const { data: photoRows, error: photoError } = await supabase
-    .from("photos")
-    .select("purpose, storage_path, alt_text")
-    .eq("site_spec_id", specId);
+  const { data: photoRows, error: photoError } = await postgrestBypass<
+    Array<{ purpose: string; storage_path: string; alt_text: string }>
+  >({
+    table: "photos",
+    queryParams: `select=purpose,storage_path,alt_text&site_spec_id=eq.${specId}`,
+  });
 
   if (photoError) {
-    console.error("[useBuild] Failed to fetch photos:", photoError.message);
+    console.error("[useBuild] Failed to fetch photos:", photoError);
   }
 
   // Use public URLs with Supabase Image Transforms (Pro plan).
@@ -502,39 +504,41 @@ export function useBuild(siteSpec: SiteSpec | null): UseBuildReturn {
 
       let checkpointId: string | null = null;
       for (let attempt = 0; attempt < 3; attempt++) {
-        const { data: maxRow } = await supabase
-          .from("site_checkpoints")
-          .select("version")
-          .eq("site_spec_id", spec.id)
-          .order("version", { ascending: false })
-          .limit(1)
-          .single();
+        const { data: versionRows } = await postgrestBypass<Array<{ version: number }>>({
+          table: "site_checkpoints",
+          queryParams: `select=version&site_spec_id=eq.${spec.id}&order=version.desc&limit=1`,
+        });
 
-        const nextVersion = maxRow ? Number(maxRow.version) + 1 : 1;
+        const nextVersion = (versionRows?.[0]?.version ?? 0) + 1;
 
-        const { data: cpData, error: cpError } = await supabase
-          .from("site_checkpoints")
-          .insert({
+        const { data: cpRows, error: cpError, statusCode } = await postgrestBypass<
+          Array<{ id: string }>
+        >({
+          table: "site_checkpoints",
+          method: "POST",
+          queryParams: "select=id",
+          body: {
             site_spec_id: spec.id,
             version: nextVersion,
             html_pages: { pages: generatedPages },
             design_system: designSystem,
             label: `AI build v${nextVersion}`,
-          })
-          .select("id")
-          .single();
+          },
+          headers: { Prefer: "return=representation" },
+        });
 
-        if (!cpError && cpData) {
-          checkpointId = cpData.id as string;
+        if (!cpError && cpRows?.[0]) {
+          checkpointId = cpRows[0].id;
           break;
         }
 
-        if (cpError?.code === "23505" && attempt < 2) {
+        // 409 = unique constraint violation (version already exists)
+        if (statusCode === 409 && attempt < 2) {
           console.warn(`[useBuild] Version conflict (attempt ${attempt + 1}), retrying…`);
           continue;
         }
 
-        console.error("[useBuild] Checkpoint save error:", cpError?.message);
+        console.error("[useBuild] Checkpoint save error:", cpError);
         setBuildError("Failed to save checkpoint. Your pages were generated but not saved.");
         setProgress("error", 0, 0, "Checkpoint save failed.");
         setBuilding(false);
@@ -549,13 +553,15 @@ export function useBuild(siteSpec: SiteSpec | null): UseBuildReturn {
       }
 
       // Update latest_checkpoint_id
-      const { error: cpLinkError } = await supabase
-        .from("site_specs")
-        .update({ latest_checkpoint_id: checkpointId })
-        .eq("id", spec.id);
+      const { error: cpLinkError } = await postgrestBypass({
+        table: "site_specs",
+        method: "PATCH",
+        queryParams: `id=eq.${spec.id}`,
+        body: { latest_checkpoint_id: checkpointId },
+      });
 
       if (cpLinkError) {
-        console.error("[useBuild] Failed to update latest_checkpoint_id:", cpLinkError.message);
+        console.error("[useBuild] Failed to update latest_checkpoint_id:", cpLinkError);
       }
 
       // 5. Generate sitemap + robots and deploy
@@ -600,11 +606,13 @@ export function useBuild(siteSpec: SiteSpec | null): UseBuildReturn {
       logEvent("build_succeeded", { mode: "llm" }, { siteSpecId: spec.id, userId: spec.user_id });
 
       // Fetch updated spec to get deploy_url/status (don't rely solely on realtime)
-      const { data: updatedSpec } = await supabase
-        .from("site_specs")
-        .select("status, deploy_url, preview_url, subdomain_slug")
-        .eq("id", spec.id)
-        .single();
+      const { data: updatedRows } = await postgrestBypass<
+        Array<{ status: string; deploy_url: string | null; preview_url: string | null; subdomain_slug: string | null }>
+      >({
+        table: "site_specs",
+        queryParams: `select=status,deploy_url,preview_url,subdomain_slug&id=eq.${spec.id}`,
+      });
+      const updatedSpec = updatedRows?.[0] ?? null;
 
       if (updatedSpec) {
         setLastBuildStatus({

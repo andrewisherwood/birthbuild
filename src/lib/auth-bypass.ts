@@ -178,6 +178,93 @@ export function getPublicStorageUrl(bucket: string, path: string): string {
 }
 
 // ---------------------------------------------------------------------------
+// PostgREST bypass (DB queries without SDK auth lock)
+// ---------------------------------------------------------------------------
+
+interface PostgrestBypassOptions {
+  table: string;
+  method?: "GET" | "POST" | "PATCH" | "DELETE";
+  /** PostgREST query string, e.g. "select=id&site_spec_id=eq.xxx&order=version.desc&limit=1" */
+  queryParams?: string;
+  body?: unknown;
+  /** Extra headers (e.g. Prefer: return=representation) */
+  headers?: Record<string, string>;
+}
+
+interface PostgrestBypassResult<T> {
+  data: T | null;
+  error: string | null;
+  statusCode: number;
+}
+
+/**
+ * Execute a raw PostgREST query, bypassing the SDK auth lock.
+ *
+ * The Supabase JS client's `.from()` calls go through the shared auth module
+ * to obtain headers. When the auth lock is corrupted (React 18 double-mounts,
+ * WebSocket reconnection races), these calls hang indefinitely — the same
+ * issue that affects `functions.invoke()` and Storage writes.
+ *
+ * Use this for critical DB operations that must not hang.
+ */
+export async function postgrestBypass<T = unknown>(
+  opts: PostgrestBypassOptions,
+): Promise<PostgrestBypassResult<T>> {
+  const accessToken = await getAccessTokenDirect();
+  if (!accessToken) {
+    return { data: null, error: "Your session has expired. Please sign in again.", statusCode: 0 };
+  }
+
+  const qs = opts.queryParams ? `?${opts.queryParams}` : "";
+  const url = `${SUPABASE_URL}/rest/v1/${opts.table}${qs}`;
+  const method = opts.method ?? "GET";
+
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${accessToken}`,
+    apikey: SUPABASE_ANON_KEY,
+    "Content-Type": "application/json",
+    ...(opts.headers ?? {}),
+  };
+
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      method,
+      headers,
+      ...(opts.body !== undefined ? { body: JSON.stringify(opts.body) } : {}),
+    });
+  } catch (err: unknown) {
+    const detail = err instanceof Error ? err.message : "Network error";
+    console.error(`[postgrestBypass] Fetch failed for ${method} ${opts.table}:`, detail);
+    return { data: null, error: `Network error: ${detail}`, statusCode: 0 };
+  }
+
+  if (!response.ok) {
+    const text = await response.text().catch(() => "");
+    let errorMessage = `HTTP ${response.status}`;
+    try {
+      const parsed = JSON.parse(text) as { message?: string; code?: string };
+      if (parsed.message) errorMessage = parsed.message;
+    } catch {
+      if (text) errorMessage = text;
+    }
+    return { data: null, error: errorMessage, statusCode: response.status };
+  }
+
+  // PATCH/DELETE may return 204 No Content
+  if (response.status === 204) {
+    return { data: null, error: null, statusCode: 204 };
+  }
+
+  try {
+    const data = (await response.json()) as T;
+    return { data, error: null, statusCode: response.status };
+  } catch {
+    return { data: null, error: "Failed to parse response.", statusCode: response.status };
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Edge Function bypass
 // ---------------------------------------------------------------------------
 

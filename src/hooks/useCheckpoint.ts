@@ -15,6 +15,8 @@ import type {
   CheckpointDesignSystem,
 } from "@/types/site-spec";
 
+const BUILD_DEPLOY_TIMEOUT_MS = 180_000;
+
 // ---------------------------------------------------------------------------
 // Supabase row → domain type mapper
 // ---------------------------------------------------------------------------
@@ -233,7 +235,11 @@ export function useCheckpoint(): UseCheckpointReturn {
       const { error: buildErr } = await invokeEdgeFunction<{
         success?: boolean;
         error?: string;
-      }>("build", { site_spec_id: siteSpecId, files });
+      }>(
+        "build",
+        { site_spec_id: siteSpecId, files },
+        { timeoutMs: BUILD_DEPLOY_TIMEOUT_MS },
+      );
 
       if (buildErr) {
         setError(buildErr);

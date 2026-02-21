@@ -24,6 +24,12 @@ import type { SiteSpec, SiteSpecStatus, CheckpointPage, CheckpointDesignSystem }
 import type { PhotoData } from "@/lib/pages/shared";
 import type { GenerationProgress, GenerationStage } from "@/components/dashboard/GenerationProgress";
 
+const EDGE_TIMEOUTS = {
+  buildDeployMs: 180_000,
+  designSystemMs: 180_000,
+  pageGenerationMs: 180_000,
+} as const;
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -242,7 +248,7 @@ export function useBuild(siteSpec: SiteSpec | null): UseBuildReturn {
       const { data, error } = await invokeEdgeFunction<{
         success?: boolean;
         error?: string;
-      }>("build", { site_spec_id: spec.id, files });
+      }>("build", { site_spec_id: spec.id, files }, { timeoutMs: EDGE_TIMEOUTS.buildDeployMs });
 
       if (error) {
         setBuildError(error);
@@ -338,7 +344,11 @@ export function useBuild(siteSpec: SiteSpec | null): UseBuildReturn {
         footer_html?: string;
         wordmark_svg?: string;
         error?: string;
-      }>("generate-design-system", { site_spec_id: spec.id });
+      }>(
+        "generate-design-system",
+        { site_spec_id: spec.id },
+        { timeoutMs: EDGE_TIMEOUTS.designSystemMs },
+      );
 
       if (dsError) {
         console.error("[useBuild] generate-design-system error:", dsError);
@@ -404,6 +414,7 @@ export function useBuild(siteSpec: SiteSpec | null): UseBuildReturn {
               altText: p.altText,
             })),
           },
+          { timeoutMs: EDGE_TIMEOUTS.pageGenerationMs },
         );
 
         if (error) {
@@ -555,7 +566,7 @@ export function useBuild(siteSpec: SiteSpec | null): UseBuildReturn {
       const { data: buildData, error: buildErr } = await invokeEdgeFunction<{
         success?: boolean;
         error?: string;
-      }>("build", { site_spec_id: spec.id, files });
+      }>("build", { site_spec_id: spec.id, files }, { timeoutMs: EDGE_TIMEOUTS.buildDeployMs });
 
       if (buildErr) {
         console.error("[useBuild] Deploy error:", buildErr);

@@ -38,7 +38,11 @@ export async function invokeEdgeFunction<T = unknown>(
   try {
     const timeoutPromise = new Promise<never>((_, reject) => {
       timeoutId = setTimeout(() => {
-        reject(new Error(`Request timed out after ${Math.round(timeoutMs / 1000)} seconds.`));
+        reject(
+          new Error(
+            `${functionName} timed out after ${Math.round(timeoutMs / 1000)} seconds.`,
+          ),
+        );
       }, timeoutMs);
     });
 

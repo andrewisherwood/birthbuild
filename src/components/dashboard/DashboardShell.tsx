@@ -3,6 +3,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
 import { Button } from "@/components/ui/Button";
+import { BugReportModal } from "@/components/ui/BugReportModal";
 import { TabNav } from "@/components/dashboard/TabNav";
 import { ProgressIndicator } from "@/components/dashboard/ProgressIndicator";
 import type { TabKey } from "@/components/dashboard/TabNav";
@@ -32,6 +33,7 @@ export function DashboardShell({
   const tabParam = searchParams.get("tab") as TabKey | null;
   const initialTab = tabParam && VALID_TABS.includes(tabParam) ? tabParam : "business";
   const [activeTab, setActiveTab] = useState<TabKey>(initialTab);
+  const [bugReportOpen, setBugReportOpen] = useState(false);
 
   if (loading) {
     return (
@@ -84,6 +86,14 @@ export function DashboardShell({
             >
               Back to chat
             </Link>
+            <button
+              type="button"
+              onClick={() => setBugReportOpen(true)}
+              className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-green-700"
+              aria-label="Report a bug"
+            >
+              Report Bug
+            </button>
             <Button variant="outline" size="sm" onClick={signOut}>
               Sign out
             </Button>
@@ -110,6 +120,8 @@ export function DashboardShell({
           {children(activeTab)}
         </div>
       </main>
+
+      <BugReportModal open={bugReportOpen} onClose={() => setBugReportOpen(false)} />
     </div>
   );
 }

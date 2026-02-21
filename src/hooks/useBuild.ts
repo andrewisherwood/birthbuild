@@ -19,6 +19,7 @@ import { generateSite } from "@/lib/site-generator";
 import { getPaletteColours, meetsContrastAA } from "@/lib/palettes";
 import { generateRobotsTxt, generateSitemap } from "@/lib/seo-files";
 import { generateLlmsTxt } from "@/lib/llms-txt";
+import { logEvent } from "@/lib/log-event";
 import type { SiteSpec, SiteSpecStatus, CheckpointPage, CheckpointDesignSystem } from "@/types/site-spec";
 import type { PhotoData } from "@/lib/pages/shared";
 import type { GenerationProgress, GenerationStage } from "@/components/dashboard/GenerationProgress";
@@ -254,6 +255,7 @@ export function useBuild(siteSpec: SiteSpec | null): UseBuildReturn {
     setBuilding(true);
     setValidationWarnings([]);
     setGenerationProgress(null);
+    logEvent("build_triggered", { mode: "template" }, { siteSpecId: spec.id, userId: spec.user_id });
 
     const warnings: string[] = [];
 
@@ -287,18 +289,21 @@ export function useBuild(siteSpec: SiteSpec | null): UseBuildReturn {
 
       if (error) {
         setBuildError(error);
+        logEvent("build_failed", { mode: "template", error }, { siteSpecId: spec.id, userId: spec.user_id });
         setBuilding(false);
         return;
       }
 
       if (data?.error) {
         setBuildError(data.error);
+        logEvent("build_failed", { mode: "template", error: data.error }, { siteSpecId: spec.id, userId: spec.user_id });
         setBuilding(false);
       }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "An unexpected error occurred.";
       console.error("[useBuild] Build error:", message);
       setBuildError("Something went wrong. Please try again.");
+      logEvent("build_failed", { mode: "template", error: message }, { siteSpecId: spec.id, userId: spec.user_id });
       setBuilding(false);
     }
   }, []);
@@ -337,6 +342,7 @@ export function useBuild(siteSpec: SiteSpec | null): UseBuildReturn {
     setBuildError(null);
     setBuilding(true);
     setValidationWarnings([]);
+    logEvent("build_triggered", { mode: "llm" }, { siteSpecId: spec.id, userId: spec.user_id });
 
     const setProgress = (stage: GenerationStage, current = 0, total = 0, error?: string) => {
       setGenerationProgress({ stage, current, total, error });
@@ -591,6 +597,7 @@ export function useBuild(siteSpec: SiteSpec | null): UseBuildReturn {
 
       console.log("[useBuild] LLM build complete.");
       setProgress("complete");
+      logEvent("build_succeeded", { mode: "llm" }, { siteSpecId: spec.id, userId: spec.user_id });
 
       // Fetch updated spec to get deploy_url/status (don't rely solely on realtime)
       const { data: updatedSpec } = await supabase
@@ -614,6 +621,7 @@ export function useBuild(siteSpec: SiteSpec | null): UseBuildReturn {
       console.error("[useBuild] LLM build error:", message);
       setBuildError("Something went wrong. Please try again.");
       setProgress("error", 0, 0, message);
+      logEvent("build_failed", { mode: "llm", error: message }, { siteSpecId: spec.id, userId: spec.user_id });
       setBuilding(false);
     }
   }, []);

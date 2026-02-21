@@ -13,6 +13,7 @@ import {
   corsHeaders,
   isRateLimited,
   authenticateAndGetApiKey,
+  createServiceClient,
   checkBodySize,
   jsonResponse,
 } from "../_shared/edge-helpers.ts";
@@ -226,7 +227,17 @@ Use the output_edited_section tool to return the edited HTML. Keep the <!-- bb-s
   }
 
   // 6. Sanitise output
-  const sanitisedHtml = sanitiseHtml(toolUse.input.html as string);
+  const { html: sanitisedHtml, stripped } = sanitiseHtml(toolUse.input.html as string);
+
+  // Log security event if content was stripped
+  if (stripped.length > 0) {
+    const serviceClient = createServiceClient();
+    await serviceClient.from("app_events").insert({
+      user_id: auth!.userId,
+      event: "sanitiser_blocked_content",
+      metadata: { component: "edit-section", stripped },
+    });
+  }
 
   return jsonResponse(
     {

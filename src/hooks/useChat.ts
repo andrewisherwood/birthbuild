@@ -13,6 +13,7 @@ import {
 } from "@/lib/claude";
 import { WELCOME_MESSAGE } from "@/lib/chat-prompts";
 import { mapToolCallToSpecUpdate } from "@/lib/chat-tools";
+import { logEvent } from "@/lib/log-event";
 import type { ChatMessage, ChatStep, SiteSpec } from "@/types/site-spec";
 
 // ---------------------------------------------------------------------------
@@ -120,6 +121,7 @@ export function useChat({ siteSpec, updateSiteSpec }: UseChatParams): UseChatRet
       // Persist the welcome message to the spec
       if (siteSpec) {
         void updateSiteSpec({ chat_history: [welcomeMsg] });
+        logEvent("chat_started", {}, { siteSpecId: siteSpec.id, userId: siteSpec.user_id });
       }
     }
   }, [siteSpec, updateSiteSpec]);
@@ -202,6 +204,15 @@ export function useChat({ siteSpec, updateSiteSpec }: UseChatParams): UseChatRet
             setCompletedSteps((prev) =>
               prev.includes(completedStep) ? prev : [...prev, completedStep],
             );
+
+            logEvent("chat_step_completed", {
+              completed_step: completedStep,
+              next_step: nextStep,
+            }, { siteSpecId: siteSpec?.id, userId: siteSpec?.user_id });
+
+            if (nextStep === "complete") {
+              logEvent("chat_completed", {}, { siteSpecId: siteSpec?.id, userId: siteSpec?.user_id });
+            }
           }
         }
 
@@ -220,6 +231,7 @@ export function useChat({ siteSpec, updateSiteSpec }: UseChatParams): UseChatRet
         const message =
           err instanceof Error ? err.message : "Something went wrong. Please try again.";
         setError(message);
+        logEvent("chat_error", { error: message }, { siteSpecId: siteSpec?.id, userId: siteSpec?.user_id });
       } finally {
         setIsLoading(false);
         sendingRef.current = false;

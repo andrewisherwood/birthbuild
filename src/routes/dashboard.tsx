@@ -1,6 +1,8 @@
+import { useEffect } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { useSiteSpec } from "@/hooks/useSiteSpec";
+import { logEvent } from "@/lib/log-event";
 import { usePhotoUpload } from "@/hooks/usePhotoUpload";
 import { useDebouncedSave } from "@/hooks/useDebouncedSave";
 import { DashboardShell } from "@/components/dashboard/DashboardShell";
@@ -22,6 +24,12 @@ export default function DashboardPage() {
   const { siteSpec, loading: specLoading, error, isStale, patchLocal, updateSiteSpec, refreshSpec } = useSiteSpec(siteId);
   const { photos } = usePhotoUpload(siteSpec?.id ?? null);
   const { debouncedUpdate } = useDebouncedSave({ updateSiteSpec, patchLocal });
+
+  useEffect(() => {
+    if (siteSpec) {
+      logEvent("dashboard_opened", {}, { siteSpecId: siteSpec.id, userId: siteSpec.user_id });
+    }
+  }, [siteSpec?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const isInstructor = profile?.role === "instructor" || profile?.role === "admin";
 

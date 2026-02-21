@@ -100,23 +100,45 @@ const HTTP_URL_RE = /(\s(?:href|src)\s*=\s*(?:"|'))http:\/\//gi;
  * - Relative URLs
  * - <script type="application/ld+json"> blocks (validated via JSON round-trip)
  */
-export function sanitiseHtml(html: string): string {
+export interface SanitiseResult {
+  html: string;
+  stripped: string[];
+}
+
+export function sanitiseHtml(html: string): SanitiseResult {
+  const stripped: string[] = [];
+
   // 0. Extract JSON-LD blocks before script stripping (validated via JSON round-trip)
   const { html: withoutJsonLd, blocks } = extractJsonLd(html);
   let sanitised = withoutJsonLd;
 
   // 1. Strip <script> tags and contents (closed first, then unclosed)
-  sanitised = sanitised.replace(SCRIPT_TAG_RE, "");
-  sanitised = sanitised.replace(UNCLOSED_SCRIPT_RE, "");
+  sanitised = sanitised.replace(SCRIPT_TAG_RE, (match) => {
+    stripped.push(`Removed <script> tag: ${match.slice(0, 80)}`);
+    return "";
+  });
+  sanitised = sanitised.replace(UNCLOSED_SCRIPT_RE, (match) => {
+    stripped.push(`Removed unclosed <script>: ${match.slice(0, 80)}`);
+    return "";
+  });
 
   // 2. Strip dangerous embed tags (iframe, object, embed, base)
-  sanitised = sanitised.replace(DANGEROUS_TAGS_RE, "");
+  sanitised = sanitised.replace(DANGEROUS_TAGS_RE, (match) => {
+    stripped.push(`Removed dangerous tag: ${match.slice(0, 80)}`);
+    return "";
+  });
 
   // 3. Strip event handler attributes
-  sanitised = sanitised.replace(EVENT_HANDLER_RE, "");
+  sanitised = sanitised.replace(EVENT_HANDLER_RE, (match) => {
+    stripped.push(`Removed event handler: ${match.trim().slice(0, 80)}`);
+    return "";
+  });
 
   // 4. Neutralise javascript: and data: URLs
-  sanitised = sanitised.replace(DANGEROUS_URL_RE, "$1about:blank");
+  sanitised = sanitised.replace(DANGEROUS_URL_RE, (_match, prefix: string) => {
+    stripped.push("Neutralised dangerous URL (javascript:/data:)");
+    return `${prefix}about:blank`;
+  });
 
   // 5. Upgrade http:// to https:// in links/sources
   sanitised = sanitised.replace(HTTP_URL_RE, "$1https://");
@@ -124,7 +146,15 @@ export function sanitiseHtml(html: string): string {
   // 6. Restore validated JSON-LD blocks
   sanitised = restoreJsonLd(sanitised, blocks);
 
-  return sanitised;
+  return { html: sanitised, stripped };
+}
+
+/**
+ * Backwards-compatible wrapper that returns just the sanitised HTML string.
+ * Used by callers that don't need the stripped report.
+ */
+export function sanitiseHtmlString(html: string): string {
+  return sanitiseHtml(html).html;
 }
 
 // ---------------------------------------------------------------------------
@@ -152,11 +182,29 @@ const CSS_DANGEROUS_URL_RE = /url\s*\(\s*(?:"|')?(?:javascript|data)\s*:/gi;
  * - expression() (IE JavaScript-in-CSS)
  * - url() with javascript: or data: schemes
  */
-export function sanitiseCss(css: string): string {
+export interface CssSanitiseResult {
+  css: string;
+  stripped: string[];
+}
+
+export function sanitiseCss(css: string): CssSanitiseResult {
+  const stripped: string[] = [];
   let sanitised = css;
-  sanitised = sanitised.replace(STYLE_BREAKOUT_RE, "/* blocked */");
-  sanitised = sanitised.replace(CSS_IMPORT_RE, "/* blocked */");
-  sanitised = sanitised.replace(CSS_EXPRESSION_RE, "/* blocked */(");
-  sanitised = sanitised.replace(CSS_DANGEROUS_URL_RE, 'url("about:blank');
-  return sanitised;
+  sanitised = sanitised.replace(STYLE_BREAKOUT_RE, () => {
+    stripped.push("Blocked </style> breakout");
+    return "/* blocked */";
+  });
+  sanitised = sanitised.replace(CSS_IMPORT_RE, (match) => {
+    stripped.push(`Blocked @import: ${match.slice(0, 80)}`);
+    return "/* blocked */";
+  });
+  sanitised = sanitised.replace(CSS_EXPRESSION_RE, () => {
+    stripped.push("Blocked expression()");
+    return "/* blocked */(";
+  });
+  sanitised = sanitised.replace(CSS_DANGEROUS_URL_RE, () => {
+    stripped.push("Blocked dangerous url() (javascript:/data:)");
+    return 'url("about:blank';
+  });
+  return { css: sanitised, stripped };
 }

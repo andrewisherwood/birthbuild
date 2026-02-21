@@ -513,9 +513,20 @@ Deno.serve(async (req: Request): Promise<Response> => {
   };
 
   // 8. Sanitise output
-  const sanitisedCss = sanitiseCss(css);
-  const sanitisedNavHtml = sanitiseHtml(nav_html);
-  const sanitisedFooterHtml = sanitiseHtml(footer_html);
+  const { css: sanitisedCss, stripped: cssStripped } = sanitiseCss(css);
+  const { html: sanitisedNavHtml, stripped: navStripped } = sanitiseHtml(nav_html);
+  const { html: sanitisedFooterHtml, stripped: footerStripped } = sanitiseHtml(footer_html);
+
+  // Log security event if content was stripped
+  const allStripped = [...cssStripped, ...navStripped, ...footerStripped];
+  if (allStripped.length > 0) {
+    const serviceClient = createServiceClient();
+    await serviceClient.from("app_events").insert({
+      user_id: auth!.userId,
+      event: "sanitiser_blocked_content",
+      metadata: { component: "design-system", stripped: allStripped },
+    });
+  }
 
   return jsonResponse(
     {

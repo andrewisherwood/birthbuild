@@ -1,5 +1,6 @@
 import { useState, useCallback } from "react";
 import { invokeEdgeFunctionBypass } from "@/lib/auth-bypass";
+import { logEvent } from "@/lib/log-event";
 import type { SiteSpec } from "@/types/site-spec";
 
 interface UsePublishOptions {
@@ -35,12 +36,15 @@ export function usePublish(siteSpec: SiteSpec | null, options?: UsePublishOption
 
       if (error) {
         setPublishError(error);
+        logEvent("build_failed", { action: "publish", error }, { siteSpecId: siteSpec.id, userId: siteSpec.user_id });
         return;
       }
 
       if (data?.error) {
         setPublishError(data.error);
+        logEvent("build_failed", { action: "publish", error: data.error }, { siteSpecId: siteSpec.id, userId: siteSpec.user_id });
       } else {
+        logEvent("site_published", {}, { siteSpecId: siteSpec.id, userId: siteSpec.user_id });
         options?.onComplete?.();
       }
     } catch (err: unknown) {
@@ -75,6 +79,7 @@ export function usePublish(siteSpec: SiteSpec | null, options?: UsePublishOption
       if (data?.error) {
         setPublishError(data.error);
       } else {
+        logEvent("site_unpublished", {}, { siteSpecId: siteSpec.id, userId: siteSpec.user_id });
         options?.onComplete?.();
       }
     } catch (err: unknown) {

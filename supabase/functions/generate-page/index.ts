@@ -489,8 +489,18 @@ Use the output_page tool to return the complete HTML page.`;
   }
 
   // 7. Sanitise output
-  const sanitisedHtml = sanitiseHtml(toolUse.input.html as string);
+  const { html: sanitisedHtml, stripped } = sanitiseHtml(toolUse.input.html as string);
   const filename = PAGE_FILENAMES[body.page] ?? `${body.page}.html`;
+
+  // Log security event if content was stripped
+  if (stripped.length > 0) {
+    const serviceClient = createServiceClient();
+    await serviceClient.from("app_events").insert({
+      user_id: auth!.userId,
+      event: "sanitiser_blocked_content",
+      metadata: { page: body.page, stripped, site_spec_id: body.site_spec_id },
+    });
+  }
 
   return jsonResponse(
     {

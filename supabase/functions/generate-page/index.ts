@@ -177,8 +177,14 @@ function buildSystemPrompt(page: string, spec: any, designSystem: DesignSystemIn
     case "services":
       pageSpecific = `## Services Page Requirements
 - **Entity-rich h1**: "Services | ${businessName}${serviceArea ? ` in ${serviceArea}` : ""}"
-- Service cards — one card per service with title, description, and price
-- CTA section encouraging visitors to book/enquire
+- The first content section must use: <section class="section"><div class="section-inner">...</div></section>
+- Service cards section must include:
+  - a grid wrapper using .cards (preferred), .grid, or .services-grid
+  - one card per service using .card (or .card card--service when an image is used)
+  - title, description, and <span class="price"> for each service
+  - at least one CTA using .btn or .btn--outline
+- CTA section encouraging visitors to book/enquire and using design-system button classes
+- Do NOT invent alternative component class names. Use existing design-system classes only.
 - **Service schema JSON-LD** in a <script type="application/ld+json"> block with @graph containing an array of Service objects, each with name, description, provider (LocalBusiness with name "${businessName}"), and areaServed.`;
       break;
 
@@ -288,7 +294,8 @@ Generate a complete \`<!DOCTYPE html>\` page with:
 - Mobile-first responsive (the CSS handles this)
 - Creative, professional, and warm — make this site stand out
 - CRITICAL: Do NOT add any inline styles with hardcoded colours. Use var(--colour-primary), var(--colour-accent), etc. from the design system CSS.
-- CRITICAL: Do NOT override the design system fonts with different font families.`;
+- CRITICAL: Do NOT override the design system fonts with different font families.
+- CRITICAL: Use existing design-system class names only. Do NOT invent new component class names.`;
 }
 
 // ---------------------------------------------------------------------------
@@ -309,6 +316,213 @@ const OUTPUT_TOOL = {
     required: ["html"],
   },
 };
+
+// ---------------------------------------------------------------------------
+// Claude invocation + output guards
+// ---------------------------------------------------------------------------
+
+interface ClaudePageResult {
+  html: string | null;
+  error: string | null;
+  status: number;
+}
+
+interface PageValidationResult {
+  valid: boolean;
+  issues: string[];
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function hasClass(html: string, className: string): boolean {
+  const safeClass = escapeRegExp(className);
+  const classRe = new RegExp(`class\\s*=\\s*["'][^"']*\\b${safeClass}\\b[^"']*["']`, "i");
+  return classRe.test(html);
+}
+
+function validatePageStructure(page: string, html: string): PageValidationResult {
+  // Current reliability issue is concentrated on services page styling drift.
+  if (page !== "services") {
+    return { valid: true, issues: [] };
+  }
+
+  const issues: string[] = [];
+
+  if (!/<main\b/i.test(html)) {
+    issues.push("missing <main> content container");
+  }
+  if (!hasClass(html, "section")) {
+    issues.push("missing .section class");
+  }
+  if (!hasClass(html, "section-inner")) {
+    issues.push("missing .section-inner class");
+  }
+  if (!(hasClass(html, "cards") || hasClass(html, "grid") || hasClass(html, "services-grid"))) {
+    issues.push("missing card grid class (.cards, .grid, or .services-grid)");
+  }
+  if (!hasClass(html, "card")) {
+    issues.push("missing .card class on service cards");
+  }
+  if (!hasClass(html, "btn")) {
+    issues.push("missing .btn class on at least one CTA");
+  }
+  if (!/<script\s+type\s*=\s*["']application\/ld\+json["']/i.test(html)) {
+    issues.push("missing JSON-LD script block");
+  }
+
+  return { valid: issues.length === 0, issues };
+}
+
+function enforceDesignSystemCss(html: string, css: string): string {
+  const canonicalStyle = `<style>\n${css}\n</style>`;
+  const withoutStyleBlocks = html.replace(/<style\b[^>]*>[\s\S]*?<\/style\s*>/gi, "");
+
+  if (/<\/head>/i.test(withoutStyleBlocks)) {
+    return withoutStyleBlocks.replace(/<\/head>/i, `${canonicalStyle}\n</head>`);
+  }
+
+  // Fallback for malformed HTML: prepend CSS so we never deploy an unstyled page.
+  return `${canonicalStyle}\n${withoutStyleBlocks}`;
+}
+
+function buildUserMessage(
+  page: string,
+  designSystem: DesignSystemInput,
+  mode: "initial" | "repair",
+  issues: string[] = [],
+): string {
+  const repairBlock = mode === "repair"
+    ? `
+The previous ${page} page draft failed validation:
+- ${issues.join("\n- ")}
+
+Regenerate the full page now and follow this class map exactly:
+- Layout: .section, .section-inner, .section--alt, .text-center
+- Cards: .cards (or .grid), .card, .card--service, .card__image, .card__body, .price
+- Actions: .btn, .btn--outline, .card__link
+
+Do not invent alternative class names.
+`
+    : "";
+
+  return `Generate the ${page} page. Here is the design system to use:
+
+### CSS (inline in <style>):
+\`\`\`css
+${designSystem.css}
+\`\`\`
+
+### Navigation HTML (insert after <body>):
+\`\`\`html
+${designSystem.nav_html.replace("{{WORDMARK_SVG}}", designSystem.wordmark_svg ?? "")}
+\`\`\`
+
+### Footer HTML (insert before </body>):
+\`\`\`html
+${designSystem.footer_html}
+\`\`\`
+${repairBlock}
+Use the output_page tool to return the complete HTML page.`;
+}
+
+async function requestPageFromClaude(
+  page: string,
+  apiKey: string,
+  systemPrompt: string,
+  userMessage: string,
+): Promise<ClaudePageResult> {
+  let claudeResponse: Response;
+  try {
+    claudeResponse = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": apiKey,
+        "anthropic-version": "2023-06-01",
+      },
+      body: JSON.stringify({
+        model: "claude-sonnet-4-5-20250929",
+        max_tokens: 16384,
+        system: systemPrompt,
+        messages: [{ role: "user", content: userMessage }],
+        tools: [OUTPUT_TOOL],
+        tool_choice: { type: "tool", name: "output_page" },
+      }),
+    });
+  } catch (fetchError: unknown) {
+    const detail = fetchError instanceof Error ? fetchError.message : "Unknown fetch error";
+    console.error(`[generate-page:${page}] Claude API fetch failed:`, detail);
+    return {
+      html: null,
+      error: "The AI service is currently unavailable. Please try again.",
+      status: 502,
+    };
+  }
+
+  if (!claudeResponse.ok) {
+    const errorText = await claudeResponse.text();
+    console.error(
+      `[generate-page:${page}] Claude API error (HTTP ${claudeResponse.status}):`,
+      errorText,
+    );
+    return {
+      html: null,
+      error: `Failed to generate ${page} page. Please try again.`,
+      status: 502,
+    };
+  }
+
+  // deno-lint-ignore no-explicit-any
+  let claudeData: any;
+  try {
+    claudeData = await claudeResponse.json();
+  } catch (parseErr: unknown) {
+    const detail = parseErr instanceof Error ? parseErr.message : "Unknown parse error";
+    console.error(`[generate-page:${page}] Failed to parse Claude response:`, detail);
+    return {
+      html: null,
+      error: `Failed to generate ${page} page. Please try again.`,
+      status: 500,
+    };
+  }
+
+  if (claudeData.stop_reason === "max_tokens") {
+    console.error(`[generate-page:${page}] Claude hit max_tokens limit`);
+    const partialToolUse = claudeData.content?.find(
+      // deno-lint-ignore no-explicit-any
+      (block: any) => block.type === "tool_use" && block.name === "output_page",
+    );
+    if (!partialToolUse?.input?.html) {
+      return {
+        html: null,
+        error: `Page generation for ${page} was cut short. Please try again.`,
+        status: 500,
+      };
+    }
+  }
+
+  const toolUse = claudeData.content?.find(
+    // deno-lint-ignore no-explicit-any
+    (block: any) => block.type === "tool_use" && block.name === "output_page",
+  );
+
+  if (!toolUse?.input?.html || typeof toolUse.input.html !== "string") {
+    console.error(
+      `[generate-page:${page}] No valid tool_use block. stop_reason=${claudeData.stop_reason}, content_types=${
+        claudeData.content?.map((b: { type: string }) => b.type).join(",") ?? "none"
+      }`,
+    );
+    return {
+      html: null,
+      error: `Failed to generate ${page} page. Please try again.`,
+      status: 500,
+    };
+  }
+
+  return { html: toolUse.input.html, error: null, status: 200 };
+}
 
 // ---------------------------------------------------------------------------
 // Handler
@@ -378,118 +592,64 @@ Deno.serve(async (req: Request): Promise<Response> => {
   // 5. Build system prompt with spec data and design system context
   const systemPrompt = buildSystemPrompt(body.page, spec, body.design_system, body.photos ?? []);
 
-  // Build user message with design system inline
-  const userMessage = `Generate the ${body.page} page. Here is the design system to use:
+  // 6. Generate page, then enforce structure if needed
+  const initialMessage = buildUserMessage(body.page, body.design_system, "initial");
+  const initialResult = await requestPageFromClaude(
+    body.page,
+    auth!.claudeApiKey,
+    systemPrompt,
+    initialMessage,
+  );
 
-### CSS (inline in <style>):
-\`\`\`css
-${body.design_system.css}
-\`\`\`
-
-### Navigation HTML (insert after <body>):
-\`\`\`html
-${body.design_system.nav_html.replace("{{WORDMARK_SVG}}", body.design_system.wordmark_svg ?? "")}
-\`\`\`
-
-### Footer HTML (insert before </body>):
-\`\`\`html
-${body.design_system.footer_html}
-\`\`\`
-
-Use the output_page tool to return the complete HTML page.`;
-
-  // 6. Call Claude API
-  let claudeResponse: Response;
-  try {
-    claudeResponse = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": auth!.claudeApiKey,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model: "claude-sonnet-4-5-20250929",
-        max_tokens: 16384,
-        system: systemPrompt,
-        messages: [{ role: "user", content: userMessage }],
-        tools: [OUTPUT_TOOL],
-        tool_choice: { type: "tool", name: "output_page" },
-      }),
-    });
-  } catch (fetchError: unknown) {
-    const detail = fetchError instanceof Error ? fetchError.message : "Unknown fetch error";
-    console.error(`[generate-page:${body.page}] Claude API fetch failed:`, detail);
+  if (initialResult.error || !initialResult.html) {
     return jsonResponse(
-      { error: "The AI service is currently unavailable. Please try again." },
-      502,
+      { error: initialResult.error ?? `Failed to generate ${body.page} page. Please try again.` },
+      initialResult.status,
       cors,
     );
   }
 
-  if (!claudeResponse.ok) {
-    const errorText = await claudeResponse.text();
-    console.error(
-      `[generate-page:${body.page}] Claude API error (HTTP ${claudeResponse.status}):`,
-      errorText,
-    );
-    return jsonResponse(
-      { error: `Failed to generate ${body.page} page. Please try again.` },
-      502,
-      cors,
-    );
-  }
+  let generatedHtml = initialResult.html;
+  let validation = validatePageStructure(body.page, generatedHtml);
 
-  // deno-lint-ignore no-explicit-any
-  let claudeData: any;
-  try {
-    claudeData = await claudeResponse.json();
-  } catch (parseErr: unknown) {
-    const detail = parseErr instanceof Error ? parseErr.message : "Unknown parse error";
-    console.error(`[generate-page:${body.page}] Failed to parse Claude response:`, detail);
-    return jsonResponse(
-      { error: `Failed to generate ${body.page} page. Please try again.` },
-      500,
-      cors,
+  if (!validation.valid) {
+    console.warn(
+      `[generate-page:${body.page}] Validation failed; retrying with stricter guidance: ${validation.issues.join("; ")}`,
     );
-  }
+    const repairMessage = buildUserMessage(body.page, body.design_system, "repair", validation.issues);
+    const repairResult = await requestPageFromClaude(
+      body.page,
+      auth!.claudeApiKey,
+      systemPrompt,
+      repairMessage,
+    );
 
-  if (claudeData.stop_reason === "max_tokens") {
-    console.error(`[generate-page:${body.page}] Claude hit max_tokens limit`);
-    // Check if the tool call completed despite the truncation
-    const partialToolUse = claudeData.content?.find(
-      // deno-lint-ignore no-explicit-any
-      (block: any) => block.type === "tool_use" && block.name === "output_page",
-    );
-    if (!partialToolUse?.input?.html) {
+    if (repairResult.error || !repairResult.html) {
       return jsonResponse(
-        { error: `Page generation for ${body.page} was cut short. Please try again.` },
+        { error: repairResult.error ?? `Failed to generate ${body.page} page. Please try again.` },
+        repairResult.status,
+        cors,
+      );
+    }
+
+    generatedHtml = repairResult.html;
+    validation = validatePageStructure(body.page, generatedHtml);
+
+    if (!validation.valid) {
+      console.error(
+        `[generate-page:${body.page}] Validation failed after retry: ${validation.issues.join("; ")}`,
+      );
+      return jsonResponse(
+        { error: `Failed to generate a fully styled ${body.page} page. Please try again.` },
         500,
         cors,
       );
     }
   }
 
-  const toolUse = claudeData.content?.find(
-    // deno-lint-ignore no-explicit-any
-    (block: any) => block.type === "tool_use" && block.name === "output_page",
-  );
-
-  if (!toolUse?.input?.html) {
-    console.error(
-      `[generate-page:${body.page}] No tool_use block. stop_reason=${claudeData.stop_reason}, content_types=${
-        claudeData.content?.map((b: { type: string }) => b.type).join(",") ?? "none"
-      }`,
-    );
-    return jsonResponse(
-      { error: `Failed to generate ${body.page} page. Please try again.` },
-      500,
-      cors,
-    );
-  }
-
-  // 7. Sanitise output
-  const { html: sanitisedHtml, stripped } = sanitiseHtml(toolUse.input.html as string);
+  // 7. Enforce canonical CSS and sanitise output
+  const htmlWithCanonicalCss = enforceDesignSystemCss(generatedHtml, body.design_system.css);
+  const { html: sanitisedHtml, stripped } = sanitiseHtml(htmlWithCanonicalCss);
   const filename = PAGE_FILENAMES[body.page] ?? `${body.page}.html`;
 
   // Log security event if content was stripped

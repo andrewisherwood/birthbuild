@@ -164,8 +164,9 @@ export function sanitiseHtmlString(html: string): string {
 /** Strips </style> breakout attempts from CSS strings. */
 const STYLE_BREAKOUT_RE = /<\/\s*style\s*>/gi;
 
-/** Strips @import rules that could load external resources. */
-const CSS_IMPORT_RE = /@import\s+(?:url\s*\()?[^;]+;?/gi;
+/** Strips @import rules that could load external resources.
+ *  Handles quoted URLs containing semicolons (e.g. Google Fonts multi-family URLs). */
+const CSS_IMPORT_RE = /@import\s+(?:url\s*\(\s*(?:'[^']*'|"[^"]*"|[^)]*)\s*\)|'[^']*'|"[^"]*"|[^;]+)\s*;?\s*/gi;
 
 /** Strips expression() (IE-era JavaScript-in-CSS). */
 const CSS_EXPRESSION_RE = /expression\s*\(/gi;

@@ -103,4 +103,5 @@ Use these exact SVG paths for social icons (viewBox="0 0 24 24", width/height 20
 - CRITICAL: Use the EXACT colour hex values from the MANDATORY DESIGN SYSTEM section. Do not alter, adjust, or "improve" them. Do not substitute with similar colours. Copy them character-for-character into your :root block.
 - CRITICAL: Use the EXACT font names from the MANDATORY DESIGN SYSTEM section. Do not substitute with similar fonts.
 - The CSS must be self-contained (no external dependencies except Google Fonts)
+- Do NOT use @import in the CSS. Google Fonts are loaded via a <link> tag in the HTML <head>, not via CSS @import.
 - If you find yourself reaching for sage green (#5f7161), cream (#f5f0e8), or DM Serif Display — STOP and check the MANDATORY DESIGN SYSTEM section. Those are defaults, not what this client wants.

@@ -28,11 +28,6 @@ interface InviteResultItem {
   error?: string;
 }
 
-interface RateLimitEntry {
-  count: number;
-  resetTime: number;
-}
-
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
@@ -40,36 +35,45 @@ interface RateLimitEntry {
 const MAX_EMAILS_PER_REQUEST = 50;
 const RATE_LIMIT_MAX = 100;
 const RATE_LIMIT_WINDOW_MS = 3_600_000; // 1 hour
+const RATE_LIMIT_SCOPE = "invite";
+const MAX_REQUEST_BODY_BYTES = 128 * 1024; // 128KB
 
 const UUID_REGEX =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-// ---------------------------------------------------------------------------
-// Rate limiter (in-memory, per-instructor, 100 invites/hour)
-// ---------------------------------------------------------------------------
-
-const rateLimitMap = new Map<string, RateLimitEntry>();
-
-function isRateLimited(userId: string, emailCount: number): boolean {
-  const now = Date.now();
-  const entry = rateLimitMap.get(userId);
-
-  if (!entry || now > entry.resetTime) {
-    rateLimitMap.set(userId, {
-      count: emailCount,
-      resetTime: now + RATE_LIMIT_WINDOW_MS,
+async function isRateLimited(
+  serviceClient: ReturnType<typeof createClient>,
+  userId: string,
+  emailCount: number,
+): Promise<boolean> {
+  try {
+    const { data, error } = await serviceClient.rpc("check_rate_limit_weighted", {
+      p_scope: RATE_LIMIT_SCOPE,
+      p_user_id: userId,
+      p_max_requests: RATE_LIMIT_MAX,
+      p_window_secs: Math.ceil(RATE_LIMIT_WINDOW_MS / 1000),
+      p_cost: emailCount,
     });
-    return false;
-  }
-
-  if (entry.count + emailCount > RATE_LIMIT_MAX) {
+    if (error) {
+      console.error("[invite] Rate-limit RPC error:", error.message);
+      return true;
+    }
+    return data === false;
+  } catch (err: unknown) {
+    const detail = err instanceof Error ? err.message : "Unknown error";
+    console.error("[invite] Rate-limit unexpected error:", detail);
     return true;
   }
+}
 
-  entry.count += emailCount;
-  return false;
+function checkBodySize(req: Request): boolean {
+  const contentLength = req.headers.get("content-length");
+  if (!contentLength) return true;
+  const parsed = Number.parseInt(contentLength, 10);
+  if (!Number.isFinite(parsed)) return true;
+  return parsed <= MAX_REQUEST_BODY_BYTES;
 }
 
 // ---------------------------------------------------------------------------
@@ -205,6 +209,16 @@ Deno.serve(async (req: Request): Promise<Response> => {
   // 3. Parse & validate request body
   // -----------------------------------------------------------------------
 
+  if (!checkBodySize(req)) {
+    return new Response(
+      JSON.stringify({ error: "Request body too large." }),
+      {
+        status: 413,
+        headers: { ...cors, "Content-Type": "application/json" },
+      },
+    );
+  }
+
   let body: InviteRequestBody;
   try {
     body = (await req.json()) as InviteRequestBody;
@@ -272,7 +286,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
   // 4. Rate limiting
   // -----------------------------------------------------------------------
 
-  if (isRateLimited(user.id, body.emails.length)) {
+  if (await isRateLimited(serviceClient, user.id, body.emails.length)) {
     return new Response(
       JSON.stringify({
         error:

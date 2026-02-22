@@ -23,6 +23,43 @@ interface InviteInstructorBody {
 // ---------------------------------------------------------------------------
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const MAX_EMAIL_LENGTH = 320;
+const MAX_ORG_NAME_LENGTH = 120;
+const RATE_LIMIT_SCOPE = "invite-instructor";
+const RATE_LIMIT_MAX = 20;
+const RATE_LIMIT_WINDOW_MS = 3_600_000; // 1 hour
+const MAX_REQUEST_BODY_BYTES = 32 * 1024; // 32KB
+
+async function isRateLimited(
+  serviceClient: ReturnType<typeof createClient>,
+  userId: string,
+): Promise<boolean> {
+  try {
+    const { data, error } = await serviceClient.rpc("check_rate_limit", {
+      p_scope: RATE_LIMIT_SCOPE,
+      p_user_id: userId,
+      p_max_requests: RATE_LIMIT_MAX,
+      p_window_secs: Math.ceil(RATE_LIMIT_WINDOW_MS / 1000),
+    });
+    if (error) {
+      console.error("[invite-instructor] Rate-limit RPC error:", error.message);
+      return true;
+    }
+    return data === false;
+  } catch (err: unknown) {
+    const detail = err instanceof Error ? err.message : "Unknown error";
+    console.error("[invite-instructor] Rate-limit unexpected error:", detail);
+    return true;
+  }
+}
+
+function checkBodySize(req: Request): boolean {
+  const contentLength = req.headers.get("content-length");
+  if (!contentLength) return true;
+  const parsed = Number.parseInt(contentLength, 10);
+  if (!Number.isFinite(parsed)) return true;
+  return parsed <= MAX_REQUEST_BODY_BYTES;
+}
 
 // ---------------------------------------------------------------------------
 // CORS
@@ -145,6 +182,16 @@ Deno.serve(async (req: Request): Promise<Response> => {
   // 3. Parse & validate request body
   // -------------------------------------------------------------------------
 
+  if (!checkBodySize(req)) {
+    return new Response(
+      JSON.stringify({ error: "Request body too large." }),
+      {
+        status: 413,
+        headers: { ...cors, "Content-Type": "application/json" },
+      },
+    );
+  }
+
   let body: InviteInstructorBody;
   try {
     body = (await req.json()) as InviteInstructorBody;
@@ -159,6 +206,16 @@ Deno.serve(async (req: Request): Promise<Response> => {
     typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
   const orgName =
     typeof body.org_name === "string" ? body.org_name.trim() : "";
+
+  if (email.length > MAX_EMAIL_LENGTH) {
+    return new Response(
+      JSON.stringify({ error: "Email address is too long." }),
+      {
+        status: 400,
+        headers: { ...cors, "Content-Type": "application/json" },
+      },
+    );
+  }
 
   if (!email || !EMAIL_REGEX.test(email)) {
     return new Response(
@@ -175,6 +232,30 @@ Deno.serve(async (req: Request): Promise<Response> => {
       JSON.stringify({ error: "Organisation name is required." }),
       {
         status: 400,
+        headers: { ...cors, "Content-Type": "application/json" },
+      },
+    );
+  }
+
+  if (orgName.length > MAX_ORG_NAME_LENGTH) {
+    return new Response(
+      JSON.stringify({ error: "Organisation name is too long." }),
+      {
+        status: 400,
+        headers: { ...cors, "Content-Type": "application/json" },
+      },
+    );
+  }
+
+  // Rate limit after basic validation to avoid charging malformed payloads.
+  if (await isRateLimited(serviceClient, user.id)) {
+    return new Response(
+      JSON.stringify({
+        error:
+          "You have reached the instructor invite limit. Please wait before trying again.",
+      }),
+      {
+        status: 429,
         headers: { ...cors, "Content-Type": "application/json" },
       },
     );

@@ -62,10 +62,9 @@ export async function isRateLimited(
     });
 
     if (error) {
-      // If the rate limit check fails, allow the request (fail open)
-      // but log the error for monitoring.
+      // Fail closed for security/cost-protection endpoints.
       console.error(`[rate-limit] RPC error for ${scope}:`, error.message);
-      return false;
+      return true;
     }
 
     // RPC returns true if ALLOWED, we return true if LIMITED
@@ -73,7 +72,7 @@ export async function isRateLimited(
   } catch (err: unknown) {
     const detail = err instanceof Error ? err.message : "Unknown error";
     console.error(`[rate-limit] Unexpected error for ${scope}:`, detail);
-    return false;
+    return true;
   }
 }
 

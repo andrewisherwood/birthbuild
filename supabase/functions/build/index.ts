@@ -10,6 +10,7 @@
  */
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { sanitiseHtml, sanitiseCss } from "../_shared/sanitise-html.ts";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -20,21 +21,17 @@ interface BuildRequestBody {
   files: Array<{ path: string; content: string }>;
 }
 
-interface RateLimitEntry {
-  count: number;
-  resetTime: number;
-}
-
 // ---------------------------------------------------------------------------
-// Rate limiter (in-memory, per-user, 5 builds/hour)
+// Rate limiter
 // ---------------------------------------------------------------------------
 
-const rateLimitMap = new Map<string, RateLimitEntry>();
 const RATE_LIMIT_MAX = 5;
 const RATE_LIMIT_WINDOW_MS = 3_600_000; // 1 hour
+const RATE_LIMIT_SCOPE = "build";
 const MAX_ZIP_SIZE_BYTES = 50 * 1024 * 1024; // 50MB
 const MAX_FILES = 50;
 const MAX_FILE_CONTENT_BYTES = 5 * 1024 * 1024; // 5MB per file
+const MAX_REQUEST_BODY_BYTES = 6 * 1024 * 1024; // 6MB
 const RESERVED_SLUGS = [
   "www",
   "api",
@@ -47,21 +44,149 @@ const RESERVED_SLUGS = [
   "static",
   "birthbuild",
 ];
+const SUBDOMAIN_REGEX = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
 
-function isRateLimited(userId: string): boolean {
-  const now = Date.now();
-  const entry = rateLimitMap.get(userId);
-
-  if (!entry || now > entry.resetTime) {
-    rateLimitMap.set(userId, {
-      count: 1,
-      resetTime: now + RATE_LIMIT_WINDOW_MS,
+async function isRateLimited(
+  serviceClient: ReturnType<typeof createClient>,
+  userId: string,
+): Promise<boolean> {
+  try {
+    const { data, error } = await serviceClient.rpc("check_rate_limit", {
+      p_scope: RATE_LIMIT_SCOPE,
+      p_user_id: userId,
+      p_max_requests: RATE_LIMIT_MAX,
+      p_window_secs: Math.ceil(RATE_LIMIT_WINDOW_MS / 1000),
     });
-    return false;
+    if (error) {
+      console.error("[build] Rate-limit RPC error:", error.message);
+      // Fail closed for expensive endpoints.
+      return true;
+    }
+    return data === false;
+  } catch (err: unknown) {
+    const detail = err instanceof Error ? err.message : "Unknown error";
+    console.error("[build] Rate-limit unexpected error:", detail);
+    return true;
+  }
+}
+
+function checkBodySize(req: Request): boolean {
+  const contentLength = req.headers.get("content-length");
+  if (!contentLength) return true;
+  const parsed = Number.parseInt(contentLength, 10);
+  if (!Number.isFinite(parsed)) return true;
+  return parsed <= MAX_REQUEST_BODY_BYTES;
+}
+
+function isReservedSubdomain(subdomain: string): boolean {
+  return RESERVED_SLUGS.includes(subdomain);
+}
+
+function sanitiseDeployFiles(
+  files: Array<{ path: string; content: string }>,
+): {
+  files: Array<{ path: string; content: string }>;
+  stripped: Array<{ path: string; details: string[] }>;
+} {
+  const stripped: Array<{ path: string; details: string[] }> = [];
+  const sanitisedFiles = files.map((file) => {
+    if (file.path.endsWith(".html")) {
+      const result = sanitiseHtml(file.content);
+      if (result.stripped.length > 0) {
+        stripped.push({ path: file.path, details: result.stripped });
+      }
+      return { ...file, content: result.html };
+    }
+    if (file.path.endsWith(".css")) {
+      const result = sanitiseCss(file.content);
+      if (result.stripped.length > 0) {
+        stripped.push({ path: file.path, details: result.stripped });
+      }
+      return { ...file, content: result.css };
+    }
+    return file;
+  });
+  return { files: sanitisedFiles, stripped };
+}
+
+async function isSubdomainTaken(
+  serviceClient: ReturnType<typeof createClient>,
+  subdomain: string,
+  siteSpecId: string,
+): Promise<boolean> {
+  const { data, error } = await serviceClient
+    .from("site_specs")
+    .select("id")
+    .ilike("subdomain_slug", subdomain)
+    .neq("id", siteSpecId)
+    .limit(1);
+  if (error) {
+    throw new Error(`Failed to check subdomain uniqueness: ${error.message}`);
+  }
+  return Boolean(data && data.length > 0);
+}
+
+async function chooseAutoSubdomain(
+  serviceClient: ReturnType<typeof createClient>,
+  baseName: string | null,
+  siteSpecId: string,
+): Promise<string> {
+  const base = slugify(baseName ?? "") || `site-${generateRandomSuffix()}`;
+
+  for (let attempt = 0; attempt < 8; attempt++) {
+    const candidate = attempt === 0 ? base : `${base}-${generateRandomSuffix()}`;
+    if (!SUBDOMAIN_REGEX.test(candidate)) continue;
+    if (isReservedSubdomain(candidate)) continue;
+    if (!(await isSubdomainTaken(serviceClient, candidate, siteSpecId))) {
+      return candidate;
+    }
   }
 
-  entry.count += 1;
-  return entry.count > RATE_LIMIT_MAX;
+  throw new Error("Could not allocate a unique subdomain");
+}
+
+async function resolveSubdomain(
+  serviceClient: ReturnType<typeof createClient>,
+  siteSpec: Record<string, unknown>,
+  siteSpecId: string,
+): Promise<{ slug: string; error: string | null; status: number }> {
+  const rawExisting = typeof siteSpec.subdomain_slug === "string"
+    ? siteSpec.subdomain_slug
+    : "";
+  const existingNormalised = slugify(rawExisting);
+
+  // User-provided slug: enforce strict validation and do not auto-mutate.
+  if (rawExisting.trim().length > 0) {
+    if (!existingNormalised || !SUBDOMAIN_REGEX.test(existingNormalised)) {
+      return { slug: "", error: "Invalid subdomain format. Use letters, numbers, and hyphens only.", status: 400 };
+    }
+    if (isReservedSubdomain(existingNormalised)) {
+      return { slug: "", error: "This subdomain is reserved. Please choose another.", status: 400 };
+    }
+    try {
+      if (await isSubdomainTaken(serviceClient, existingNormalised, siteSpecId)) {
+        return { slug: "", error: "This subdomain is already taken. Please choose another.", status: 409 };
+      }
+    } catch (err: unknown) {
+      const detail = err instanceof Error ? err.message : "Unknown error";
+      console.error("[build] Subdomain lookup error:", detail);
+      return { slug: "", error: "Unable to validate subdomain. Please try again.", status: 500 };
+    }
+    return { slug: existingNormalised, error: null, status: 200 };
+  }
+
+  try {
+    const slug = await chooseAutoSubdomain(
+      serviceClient,
+      (siteSpec.doula_name as string | null) ?? null,
+      siteSpecId,
+    );
+    return { slug, error: null, status: 200 };
+  } catch (err: unknown) {
+    const detail = err instanceof Error ? err.message : "Unknown error";
+    console.error("[build] Failed to allocate subdomain:", detail);
+    return { slug: "", error: "Unable to allocate a subdomain. Please try again.", status: 500 };
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -97,6 +222,7 @@ function corsHeaders(origin: string | null): Record<string, string> {
 
 function slugify(name: string): string {
   return name
+    .trim()
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/-+/g, "-")
@@ -367,6 +493,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
   const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
   const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
   const netlifyApiToken = Deno.env.get("NETLIFY_API_TOKEN");
+  const serviceClient = createClient(supabaseUrl, supabaseServiceKey);
 
   if (!netlifyApiToken) {
     console.error("[build] NETLIFY_API_TOKEN not configured");
@@ -402,7 +529,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
   // 2. Rate limiting
   // -----------------------------------------------------------------------
 
-  if (isRateLimited(user.id)) {
+  if (await isRateLimited(serviceClient, user.id)) {
     return new Response(
       JSON.stringify({
         error:
@@ -418,6 +545,16 @@ Deno.serve(async (req: Request): Promise<Response> => {
   // -----------------------------------------------------------------------
   // 3. Parse & validate request body
   // -----------------------------------------------------------------------
+
+  if (!checkBodySize(req)) {
+    return new Response(
+      JSON.stringify({ error: "Request body too large." }),
+      {
+        status: 413,
+        headers: { ...cors, "Content-Type": "application/json" },
+      },
+    );
+  }
 
   let body: BuildRequestBody;
   try {
@@ -479,7 +616,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
   }
 
   // SEC-020: File path validation pattern
-  const SAFE_PATH_REGEX = /^[a-zA-Z0-9_\-][a-zA-Z0-9_\-/]*\.(html|xml|txt|css|js|json|ico|svg|webmanifest)$/;
+  const SAFE_PATH_REGEX = /^[a-zA-Z0-9_\-][a-zA-Z0-9_\-/]*\.(html|xml|txt|css|json|ico|svg|webmanifest)$/;
   const MAX_PATH_LENGTH = 100;
 
   // Validate individual files (paths + sizes)
@@ -527,8 +664,6 @@ Deno.serve(async (req: Request): Promise<Response> => {
   // -----------------------------------------------------------------------
   // 4. Fetch site_spec via service role, verify user_id matches
   // -----------------------------------------------------------------------
-
-  const serviceClient = createClient(supabaseUrl, supabaseServiceKey);
 
   const { data: siteSpec, error: specError } = await serviceClient
     .from("site_specs")
@@ -586,7 +721,23 @@ Deno.serve(async (req: Request): Promise<Response> => {
   }
 
   // -----------------------------------------------------------------------
-  // 6. Set status to "building"
+  // 6. Resolve and validate subdomain slug
+  // -----------------------------------------------------------------------
+
+  const subdomainResolution = await resolveSubdomain(serviceClient, siteSpec as Record<string, unknown>, body.site_spec_id);
+  if (subdomainResolution.error) {
+    return new Response(
+      JSON.stringify({ error: subdomainResolution.error }),
+      {
+        status: subdomainResolution.status,
+        headers: { ...cors, "Content-Type": "application/json" },
+      },
+    );
+  }
+  const subdomainSlug = subdomainResolution.slug;
+
+  // -----------------------------------------------------------------------
+  // 7. Set status to "building"
   // -----------------------------------------------------------------------
 
   const { error: statusError } = await serviceClient
@@ -606,43 +757,28 @@ Deno.serve(async (req: Request): Promise<Response> => {
   }
 
   // -----------------------------------------------------------------------
-  // 7. Generate subdomain slug if not set
+  // 8. Sanitise files and create zip
   // -----------------------------------------------------------------------
 
-  let subdomainSlug = siteSpec.subdomain_slug as string | null;
-
-  if (!subdomainSlug && siteSpec.doula_name) {
-    subdomainSlug = slugify(siteSpec.doula_name as string);
-
-    // Check for reserved words
-    if (RESERVED_SLUGS.includes(subdomainSlug)) {
-      subdomainSlug = `${subdomainSlug}-${generateRandomSuffix()}`;
-    }
-
-    // Check uniqueness
-    const { data: existing } = await serviceClient
-      .from("site_specs")
-      .select("id")
-      .eq("subdomain_slug", subdomainSlug)
-      .neq("id", body.site_spec_id)
-      .limit(1);
-
-    if (existing && existing.length > 0) {
-      subdomainSlug = `${subdomainSlug}-${generateRandomSuffix()}`;
-    }
+  const { files: deployFiles, stripped: strippedContent } = sanitiseDeployFiles(body.files);
+  if (strippedContent.length > 0) {
+    await serviceClient.from("app_events").insert({
+      user_id: user.id,
+      site_spec_id: body.site_spec_id,
+      event: "build_sanitiser_stripped_content",
+      metadata: {
+        file_count: strippedContent.length,
+        files: strippedContent.map((item) => ({
+          path: item.path,
+          stripped_count: item.details.length,
+        })),
+      },
+    });
   }
-
-  if (!subdomainSlug) {
-    subdomainSlug = `site-${generateRandomSuffix()}`;
-  }
-
-  // -----------------------------------------------------------------------
-  // 8. Create zip from files array
-  // -----------------------------------------------------------------------
 
   let zipBuffer: Uint8Array;
   try {
-    zipBuffer = createZipBuffer(body.files);
+    zipBuffer = createZipBuffer(deployFiles);
   } catch (zipError: unknown) {
     const detail =
       zipError instanceof Error ? zipError.message : "Unknown zip error";

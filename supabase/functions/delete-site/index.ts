@@ -20,6 +20,42 @@ interface DeleteSiteRequestBody {
   site_spec_id: string;
 }
 
+const RATE_LIMIT_SCOPE = "delete-site";
+const RATE_LIMIT_MAX = 20;
+const RATE_LIMIT_WINDOW_MS = 3_600_000; // 1 hour
+const MAX_REQUEST_BODY_BYTES = 32 * 1024; // 32KB
+
+async function isRateLimited(
+  serviceClient: ReturnType<typeof createClient>,
+  userId: string,
+): Promise<boolean> {
+  try {
+    const { data, error } = await serviceClient.rpc("check_rate_limit", {
+      p_scope: RATE_LIMIT_SCOPE,
+      p_user_id: userId,
+      p_max_requests: RATE_LIMIT_MAX,
+      p_window_secs: Math.ceil(RATE_LIMIT_WINDOW_MS / 1000),
+    });
+    if (error) {
+      console.error("[delete-site] Rate-limit RPC error:", error.message);
+      return true;
+    }
+    return data === false;
+  } catch (err: unknown) {
+    const detail = err instanceof Error ? err.message : "Unknown error";
+    console.error("[delete-site] Rate-limit unexpected error:", detail);
+    return true;
+  }
+}
+
+function checkBodySize(req: Request): boolean {
+  const contentLength = req.headers.get("content-length");
+  if (!contentLength) return true;
+  const parsed = Number.parseInt(contentLength, 10);
+  if (!Number.isFinite(parsed)) return true;
+  return parsed <= MAX_REQUEST_BODY_BYTES;
+}
+
 // ---------------------------------------------------------------------------
 // CORS
 // ---------------------------------------------------------------------------
@@ -85,6 +121,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
   const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
   const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
   const netlifyApiToken = Deno.env.get("NETLIFY_API_TOKEN");
+  const serviceClient = createClient(supabaseUrl, supabaseServiceKey);
 
   const userClient = createClient(supabaseUrl, supabaseAnonKey, {
     global: { headers: { Authorization: authHeader } },
@@ -108,6 +145,28 @@ Deno.serve(async (req: Request): Promise<Response> => {
   // -----------------------------------------------------------------------
   // 2. Parse & validate request
   // -----------------------------------------------------------------------
+
+  if (await isRateLimited(serviceClient, user.id)) {
+    return new Response(
+      JSON.stringify({
+        error: "Too many delete requests. Please wait before trying again.",
+      }),
+      {
+        status: 429,
+        headers: { ...cors, "Content-Type": "application/json" },
+      },
+    );
+  }
+
+  if (!checkBodySize(req)) {
+    return new Response(
+      JSON.stringify({ error: "Request body too large." }),
+      {
+        status: 413,
+        headers: { ...cors, "Content-Type": "application/json" },
+      },
+    );
+  }
 
   let body: DeleteSiteRequestBody;
   try {
@@ -144,8 +203,6 @@ Deno.serve(async (req: Request): Promise<Response> => {
   // -----------------------------------------------------------------------
   // 3. Fetch site spec, verify ownership
   // -----------------------------------------------------------------------
-
-  const serviceClient = createClient(supabaseUrl, supabaseServiceKey);
 
   const { data: siteSpec, error: specError } = await serviceClient
     .from("site_specs")

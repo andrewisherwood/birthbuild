@@ -20,33 +20,67 @@ interface PublishRequestBody {
   action: "publish" | "unpublish";
 }
 
-interface RateLimitEntry {
-  count: number;
-  resetTime: number;
-}
-
 // ---------------------------------------------------------------------------
-// Rate limiter (in-memory, 10 per hour per user)
+// Rate limiter
 // ---------------------------------------------------------------------------
 
-const rateLimitMap = new Map<string, RateLimitEntry>();
 const RATE_LIMIT_MAX = 10;
 const RATE_LIMIT_WINDOW_MS = 3_600_000;
+const RATE_LIMIT_SCOPE = "publish";
+const MAX_REQUEST_BODY_BYTES = 64 * 1024; // 64KB
+const RESERVED_SLUGS = [
+  "www",
+  "api",
+  "app",
+  "admin",
+  "mail",
+  "ftp",
+  "cdn",
+  "assets",
+  "static",
+  "birthbuild",
+];
+const SUBDOMAIN_REGEX = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
 
-function isRateLimited(userId: string): boolean {
-  const now = Date.now();
-  const entry = rateLimitMap.get(userId);
-
-  if (!entry || now > entry.resetTime) {
-    rateLimitMap.set(userId, {
-      count: 1,
-      resetTime: now + RATE_LIMIT_WINDOW_MS,
+async function isRateLimited(
+  serviceClient: ReturnType<typeof createClient>,
+  userId: string,
+): Promise<boolean> {
+  try {
+    const { data, error } = await serviceClient.rpc("check_rate_limit", {
+      p_scope: RATE_LIMIT_SCOPE,
+      p_user_id: userId,
+      p_max_requests: RATE_LIMIT_MAX,
+      p_window_secs: Math.ceil(RATE_LIMIT_WINDOW_MS / 1000),
     });
-    return false;
+    if (error) {
+      console.error("[publish] Rate-limit RPC error:", error.message);
+      return true;
+    }
+    return data === false;
+  } catch (err: unknown) {
+    const detail = err instanceof Error ? err.message : "Unknown error";
+    console.error("[publish] Rate-limit unexpected error:", detail);
+    return true;
   }
+}
 
-  entry.count += 1;
-  return entry.count > RATE_LIMIT_MAX;
+function checkBodySize(req: Request): boolean {
+  const contentLength = req.headers.get("content-length");
+  if (!contentLength) return true;
+  const parsed = Number.parseInt(contentLength, 10);
+  if (!Number.isFinite(parsed)) return true;
+  return parsed <= MAX_REQUEST_BODY_BYTES;
+}
+
+function normaliseSubdomain(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "")
+    .substring(0, 63);
 }
 
 // ---------------------------------------------------------------------------
@@ -114,6 +148,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
   const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
   const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
   const netlifyApiToken = Deno.env.get("NETLIFY_API_TOKEN");
+  const serviceClient = createClient(supabaseUrl, supabaseServiceKey);
 
   if (!netlifyApiToken) {
     console.error("[publish] NETLIFY_API_TOKEN not configured");
@@ -149,7 +184,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
   // 2. Rate limiting
   // -----------------------------------------------------------------------
 
-  if (isRateLimited(user.id)) {
+  if (await isRateLimited(serviceClient, user.id)) {
     return new Response(
       JSON.stringify({
         error:
@@ -165,6 +200,16 @@ Deno.serve(async (req: Request): Promise<Response> => {
   // -----------------------------------------------------------------------
   // 3. Parse & validate request
   // -----------------------------------------------------------------------
+
+  if (!checkBodySize(req)) {
+    return new Response(
+      JSON.stringify({ error: "Request body too large." }),
+      {
+        status: 413,
+        headers: { ...cors, "Content-Type": "application/json" },
+      },
+    );
+  }
 
   let body: PublishRequestBody;
   try {
@@ -209,8 +254,6 @@ Deno.serve(async (req: Request): Promise<Response> => {
   // 4. Fetch site spec, verify ownership
   // -----------------------------------------------------------------------
 
-  const serviceClient = createClient(supabaseUrl, supabaseServiceKey);
-
   const { data: siteSpec, error: specError } = await serviceClient
     .from("site_specs")
     .select("*")
@@ -240,12 +283,23 @@ Deno.serve(async (req: Request): Promise<Response> => {
   }
 
   let netlifySiteId = siteSpec.netlify_site_id as string | null;
-  const subdomainSlug = siteSpec.subdomain_slug as string | null;
+  const subdomainSlug = normaliseSubdomain(String(siteSpec.subdomain_slug ?? ""));
 
-  if (!subdomainSlug) {
+  if (!subdomainSlug || !SUBDOMAIN_REGEX.test(subdomainSlug)) {
     return new Response(
       JSON.stringify({
-        error: "This site has not been built yet. Please build first.",
+        error: "Invalid subdomain. Please set a valid subdomain and rebuild.",
+      }),
+      {
+        status: 400,
+        headers: { ...cors, "Content-Type": "application/json" },
+      },
+    );
+  }
+  if (RESERVED_SLUGS.includes(subdomainSlug)) {
+    return new Response(
+      JSON.stringify({
+        error: "This subdomain is reserved. Please choose another and rebuild.",
       }),
       {
         status: 400,

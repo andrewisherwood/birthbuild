@@ -510,7 +510,7 @@ export function PreviewTab({ siteSpec, onFieldChange, isStale = false, refreshSp
             <iframe
               src={iframeUrl}
               title="Site preview"
-              sandbox="allow-scripts allow-same-origin"
+              sandbox="allow-scripts"
               className="h-[600px] border-0 bg-white"
               style={{ width: DEVICE_WIDTHS[deviceSize] }}
             />

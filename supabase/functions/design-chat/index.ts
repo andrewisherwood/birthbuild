@@ -9,18 +9,14 @@ interface DesignChatRequestBody {
   current_design: Record<string, unknown>;
 }
 
-interface RateLimitEntry {
-  count: number;
-  resetTime: number;
-}
-
 // ---------------------------------------------------------------------------
-// Rate limiter (in-memory, per-user, 60 req/min — more iterative than onboarding)
+// Rate limiter
 // ---------------------------------------------------------------------------
 
-const rateLimitMap = new Map<string, RateLimitEntry>();
 const RATE_LIMIT_MAX = 60;
 const RATE_LIMIT_WINDOW_MS = 60_000;
+const RATE_LIMIT_SCOPE = "design-chat";
+const MAX_REQUEST_BODY_BYTES = 100 * 1024; // 100KB
 const MAX_MESSAGE_LENGTH = 2_000;
 const MAX_MESSAGES_PAYLOAD_BYTES = 50 * 1024; // 50KB
 
@@ -160,17 +156,35 @@ const DESIGN_TOOLS: Array<Record<string, unknown>> = [
 // Rate limiting
 // ---------------------------------------------------------------------------
 
-function isRateLimited(userId: string): boolean {
-  const now = Date.now();
-  const entry = rateLimitMap.get(userId);
-
-  if (!entry || now > entry.resetTime) {
-    rateLimitMap.set(userId, { count: 1, resetTime: now + RATE_LIMIT_WINDOW_MS });
-    return false;
+async function isRateLimited(
+  serviceClient: ReturnType<typeof createClient>,
+  userId: string,
+): Promise<boolean> {
+  try {
+    const { data, error } = await serviceClient.rpc("check_rate_limit", {
+      p_scope: RATE_LIMIT_SCOPE,
+      p_user_id: userId,
+      p_max_requests: RATE_LIMIT_MAX,
+      p_window_secs: Math.ceil(RATE_LIMIT_WINDOW_MS / 1000),
+    });
+    if (error) {
+      console.error("[design-chat] Rate-limit RPC error:", error.message);
+      return true;
+    }
+    return data === false;
+  } catch (err: unknown) {
+    const detail = err instanceof Error ? err.message : "Unknown error";
+    console.error("[design-chat] Rate-limit unexpected error:", detail);
+    return true;
   }
+}
 
-  entry.count += 1;
-  return entry.count > RATE_LIMIT_MAX;
+function checkBodySize(req: Request): boolean {
+  const contentLength = req.headers.get("content-length");
+  if (!contentLength) return true;
+  const parsed = Number.parseInt(contentLength, 10);
+  if (!Number.isFinite(parsed)) return true;
+  return parsed <= MAX_REQUEST_BODY_BYTES;
 }
 
 // ---------------------------------------------------------------------------
@@ -234,6 +248,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
   const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
   const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+  const serviceClient = createClient(supabaseUrl, supabaseServiceKey);
 
   const userClient = createClient(supabaseUrl, supabaseAnonKey, {
     global: { headers: { Authorization: authHeader } },
@@ -255,7 +270,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
   // 2. Rate limiting
   // -----------------------------------------------------------------------
 
-  if (isRateLimited(user.id)) {
+  if (await isRateLimited(serviceClient, user.id)) {
     return new Response(
       JSON.stringify({ error: "Too many requests. Please wait a moment and try again." }),
       {
@@ -268,8 +283,6 @@ Deno.serve(async (req: Request): Promise<Response> => {
   // -----------------------------------------------------------------------
   // 3. Look up tenant_id from the user's profile
   // -----------------------------------------------------------------------
-
-  const serviceClient = createClient(supabaseUrl, supabaseServiceKey);
 
   const { data: profile, error: profileError } = await serviceClient
     .from("profiles")
@@ -310,6 +323,13 @@ Deno.serve(async (req: Request): Promise<Response> => {
   // -----------------------------------------------------------------------
   // 5. Parse & validate request body
   // -----------------------------------------------------------------------
+
+  if (!checkBodySize(req)) {
+    return new Response(JSON.stringify({ error: "Request body too large." }), {
+      status: 413,
+      headers: { ...cors, "Content-Type": "application/json" },
+    });
+  }
 
   let body: DesignChatRequestBody;
   try {

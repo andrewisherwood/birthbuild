@@ -104,7 +104,7 @@ export default function PreviewPage() {
         <iframe
           src={siteSpec.deploy_url}
           title="Full site preview"
-          sandbox="allow-scripts allow-same-origin"
+          sandbox="allow-scripts"
           className="h-full border-0 bg-white"
           style={{ width: DEVICE_WIDTHS[deviceSize] }}
         />

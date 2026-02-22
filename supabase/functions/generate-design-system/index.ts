@@ -17,6 +17,11 @@ import {
   jsonResponse,
 } from "../_shared/edge-helpers.ts";
 import { sanitiseHtml, sanitiseCss } from "../_shared/sanitise-html.ts";
+import { callModel, type ToolDefinition } from "../_shared/model-client.ts";
+import {
+  resolveTemplate,
+  buildDesignSystemVariables,
+} from "../_shared/prompt-resolver.ts";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -26,6 +31,62 @@ const RATE_LIMIT_MAX = 10;
 const RATE_LIMIT_WINDOW_MS = 3_600_000; // 1 hour
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+const VALID_PROVIDERS = ["anthropic", "openai"] as const;
+type ModelProvider = typeof VALID_PROVIDERS[number];
+
+const DEFAULT_MODEL = "claude-sonnet-4-5-20250929";
+const DEFAULT_MAX_TOKENS = 8192;
+
+// ---------------------------------------------------------------------------
+// Prompt config (A/B testing harness override)
+// ---------------------------------------------------------------------------
+
+interface PromptConfig {
+  system_prompt?: string;
+  user_message?: string;
+  model_provider?: string;
+  model_name?: string;
+  temperature?: number;
+  max_tokens?: number;
+  provider_api_key?: string;
+}
+
+function validatePromptConfig(pc: unknown): { valid: boolean; error?: string } {
+  if (pc === undefined || pc === null) return { valid: true };
+  if (typeof pc !== "object" || Array.isArray(pc)) {
+    return { valid: false, error: "prompt_config must be an object." };
+  }
+  const obj = pc as Record<string, unknown>;
+  if (obj.system_prompt !== undefined && typeof obj.system_prompt !== "string") {
+    return { valid: false, error: "prompt_config.system_prompt must be a string." };
+  }
+  if (obj.user_message !== undefined && typeof obj.user_message !== "string") {
+    return { valid: false, error: "prompt_config.user_message must be a string." };
+  }
+  if (obj.model_provider !== undefined) {
+    if (typeof obj.model_provider !== "string" || !VALID_PROVIDERS.includes(obj.model_provider as ModelProvider)) {
+      return { valid: false, error: `prompt_config.model_provider must be one of: ${VALID_PROVIDERS.join(", ")}.` };
+    }
+  }
+  if (obj.model_name !== undefined && typeof obj.model_name !== "string") {
+    return { valid: false, error: "prompt_config.model_name must be a string." };
+  }
+  if (obj.temperature !== undefined) {
+    if (typeof obj.temperature !== "number" || obj.temperature < 0 || obj.temperature > 1) {
+      return { valid: false, error: "prompt_config.temperature must be a number between 0 and 1." };
+    }
+  }
+  if (obj.max_tokens !== undefined) {
+    if (typeof obj.max_tokens !== "number" || obj.max_tokens < 1 || obj.max_tokens > 32768) {
+      return { valid: false, error: "prompt_config.max_tokens must be a number between 1 and 32768." };
+    }
+  }
+  if (obj.provider_api_key !== undefined && typeof obj.provider_api_key !== "string") {
+    return { valid: false, error: "prompt_config.provider_api_key must be a string." };
+  }
+  return { valid: true };
+}
 
 // ---------------------------------------------------------------------------
 // Palette definitions (duplicated from client — Edge Functions can't import src/)
@@ -485,34 +546,6 @@ function sanitiseDesignSystemOutput(payload: DesignSystemPayload): SanitisedDesi
   };
 }
 
-function parseToolPayload(content: unknown): DesignSystemPayload | null {
-  if (!Array.isArray(content)) return null;
-
-  for (const block of content) {
-    if (!block || typeof block !== "object") continue;
-    const record = block as Record<string, unknown>;
-    if (record.type !== "tool_use" || record.name !== "output_design_system") continue;
-    if (!record.input || typeof record.input !== "object") return null;
-
-    const input = record.input as Record<string, unknown>;
-    if (
-      typeof input.css !== "string" ||
-      typeof input.nav_html !== "string" ||
-      typeof input.footer_html !== "string"
-    ) {
-      return null;
-    }
-
-    return {
-      css: input.css,
-      nav_html: input.nav_html,
-      footer_html: input.footer_html,
-    };
-  }
-
-  return null;
-}
-
 function buildRepairPrompt(issues: string[]): string {
   return `Your previous output failed server validation and cannot be used.
 
@@ -527,32 +560,76 @@ Requirements:
 4. Do not shorten the CSS. Return the complete stylesheet.`;
 }
 
-async function requestDesignSystemFromClaude(
+async function requestDesignSystem(
   apiKey: string,
   systemPrompt: string,
   userMessage: string,
+  promptConfig?: PromptConfig,
 ): Promise<ClaudeDesignSystemResult> {
-  let claudeResponse: Response;
+  const provider: ModelProvider =
+    (promptConfig?.model_provider as ModelProvider) ?? "anthropic";
+  const model = promptConfig?.model_name ?? DEFAULT_MODEL;
+  const effectiveApiKey = promptConfig?.provider_api_key ?? apiKey;
+  const maxTokens = promptConfig?.max_tokens ?? DEFAULT_MAX_TOKENS;
+
   try {
-    claudeResponse = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model: "claude-sonnet-4-5-20250929",
-        max_tokens: 8192,
-        system: systemPrompt,
-        messages: [{ role: "user", content: userMessage }],
-        tools: [OUTPUT_TOOL],
-        tool_choice: { type: "tool", name: "output_design_system" },
-      }),
+    const response = await callModel({
+      provider,
+      model,
+      apiKey: effectiveApiKey,
+      systemPrompt,
+      userMessage,
+      tools: [OUTPUT_TOOL as ToolDefinition],
+      forcedTool: "output_design_system",
+      temperature: promptConfig?.temperature,
+      maxTokens,
     });
-  } catch (fetchError: unknown) {
-    const detail = fetchError instanceof Error ? fetchError.message : "Unknown fetch error";
-    console.error("[generate-design-system] Claude API fetch failed:", detail);
+
+    if (response.stopReason === "max_tokens") {
+      console.error("[generate-design-system] Model hit max_tokens limit");
+    }
+
+    if (
+      response.toolName !== "output_design_system" ||
+      !response.toolInput
+    ) {
+      console.error("[generate-design-system] No valid tool_use payload in model response");
+      return {
+        payload: null,
+        error: "Failed to generate design system. Please try again.",
+        status: 500,
+        stopReason: response.stopReason,
+      };
+    }
+
+    const input = response.toolInput;
+    if (
+      typeof input.css !== "string" ||
+      typeof input.nav_html !== "string" ||
+      typeof input.footer_html !== "string"
+    ) {
+      console.error("[generate-design-system] Tool payload missing required fields");
+      return {
+        payload: null,
+        error: "Failed to generate design system. Please try again.",
+        status: 500,
+        stopReason: response.stopReason,
+      };
+    }
+
+    return {
+      payload: {
+        css: input.css,
+        nav_html: input.nav_html,
+        footer_html: input.footer_html,
+      },
+      error: null,
+      status: 200,
+      stopReason: response.stopReason,
+    };
+  } catch (err: unknown) {
+    const detail = err instanceof Error ? err.message : "Unknown error";
+    console.error("[generate-design-system] Model API call failed:", detail);
     return {
       payload: null,
       error: "The AI service is currently unavailable. Please try again.",
@@ -560,60 +637,6 @@ async function requestDesignSystemFromClaude(
       stopReason: null,
     };
   }
-
-  if (!claudeResponse.ok) {
-    const errorText = await claudeResponse.text();
-    console.error(
-      `[generate-design-system] Claude API error (HTTP ${claudeResponse.status}):`,
-      errorText,
-    );
-    return {
-      payload: null,
-      error: "The AI service returned an error. Please try again.",
-      status: 502,
-      stopReason: null,
-    };
-  }
-
-  let claudeData: unknown;
-  try {
-    claudeData = await claudeResponse.json();
-  } catch (parseErr: unknown) {
-    const detail = parseErr instanceof Error ? parseErr.message : "Unknown parse error";
-    console.error("[generate-design-system] Failed to parse Claude response:", detail);
-    return {
-      payload: null,
-      error: "Failed to generate design system. Please try again.",
-      status: 500,
-      stopReason: null,
-    };
-  }
-
-  const dataRecord = claudeData && typeof claudeData === "object"
-    ? (claudeData as Record<string, unknown>)
-    : null;
-  const stopReason = typeof dataRecord?.stop_reason === "string" ? dataRecord.stop_reason : null;
-  if (stopReason === "max_tokens") {
-    console.error("[generate-design-system] Claude hit max_tokens limit");
-  }
-
-  const payload = parseToolPayload(dataRecord?.content);
-  if (!payload) {
-    console.error("[generate-design-system] No valid tool_use payload in Claude response");
-    return {
-      payload: null,
-      error: "Failed to generate design system. Please try again.",
-      status: 500,
-      stopReason,
-    };
-  }
-
-  return {
-    payload,
-    error: null,
-    status: 200,
-    stopReason,
-  };
 }
 
 // ---------------------------------------------------------------------------
@@ -649,7 +672,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
   const sizeErr = checkBodySize(req, cors);
   if (sizeErr) return sizeErr;
 
-  let body: { site_spec_id?: string; repair_issues?: string[] };
+  let body: { site_spec_id?: string; repair_issues?: string[]; prompt_config?: PromptConfig };
   try {
     body = await req.json();
   } catch {
@@ -669,6 +692,12 @@ Deno.serve(async (req: Request): Promise<Response> => {
     ) {
       return jsonResponse({ error: "repair_issues must be an array of up to 50 strings." }, 400, cors);
     }
+  }
+
+  // Validate prompt_config if provided (A/B testing harness)
+  const pcValidation = validatePromptConfig(body.prompt_config);
+  if (!pcValidation.valid) {
+    return jsonResponse({ error: pcValidation.error! }, 400, cors);
   }
 
   // 4. Fetch spec via service role (bypasses RLS for full access)
@@ -695,17 +724,32 @@ Deno.serve(async (req: Request): Promise<Response> => {
     resolved.style,
   );
 
-  // 7. Call Claude API (single pass — client handles retry with repair_issues)
-  const systemPrompt = buildSystemPrompt(resolved);
-  const userMessage =
-    body.repair_issues && body.repair_issues.length > 0
-      ? buildRepairPrompt(body.repair_issues)
-      : "Generate the complete CSS design system, navigation header HTML, and footer HTML for this birth worker's website. Use the output_design_system tool to return your work.";
+  // 7. Call model (single pass — client handles retry with repair_issues)
+  // If prompt_config.system_prompt is provided, resolve its {{variables}} from the spec.
+  // Otherwise, use the hardcoded buildSystemPrompt() for production behaviour.
+  let systemPrompt: string;
+  if (body.prompt_config?.system_prompt) {
+    const variables = buildDesignSystemVariables(resolved);
+    systemPrompt = resolveTemplate(body.prompt_config.system_prompt, variables);
+  } else {
+    systemPrompt = buildSystemPrompt(resolved);
+  }
 
-  const result = await requestDesignSystemFromClaude(
+  let userMessage: string;
+  if (body.prompt_config?.user_message) {
+    const variables = buildDesignSystemVariables(resolved);
+    userMessage = resolveTemplate(body.prompt_config.user_message, variables);
+  } else if (body.repair_issues && body.repair_issues.length > 0) {
+    userMessage = buildRepairPrompt(body.repair_issues);
+  } else {
+    userMessage = "Generate the complete CSS design system, navigation header HTML, and footer HTML for this birth worker's website. Use the output_design_system tool to return your work.";
+  }
+
+  const result = await requestDesignSystem(
     auth!.claudeApiKey,
     systemPrompt,
     userMessage,
+    body.prompt_config,
   );
 
   if (result.error || !result.payload) {

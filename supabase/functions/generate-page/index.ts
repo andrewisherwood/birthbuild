@@ -17,6 +17,12 @@ import {
   jsonResponse,
 } from "../_shared/edge-helpers.ts";
 import { sanitiseHtml } from "../_shared/sanitise-html.ts";
+import { callModel, type ToolDefinition } from "../_shared/model-client.ts";
+import {
+  resolveTemplate,
+  buildPageVariables,
+  type ResolvedSpecForPrompt,
+} from "../_shared/prompt-resolver.ts";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -26,6 +32,62 @@ const RATE_LIMIT_MAX = 20;
 const RATE_LIMIT_WINDOW_MS = 3_600_000; // 1 hour
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+const VALID_PROVIDERS = ["anthropic", "openai"] as const;
+type ModelProvider = typeof VALID_PROVIDERS[number];
+
+const DEFAULT_MODEL = "claude-sonnet-4-5-20250929";
+const DEFAULT_MAX_TOKENS = 16384;
+
+// ---------------------------------------------------------------------------
+// Prompt config (A/B testing harness override)
+// ---------------------------------------------------------------------------
+
+interface PromptConfig {
+  system_prompt?: string;
+  user_message?: string;
+  model_provider?: string;
+  model_name?: string;
+  temperature?: number;
+  max_tokens?: number;
+  provider_api_key?: string;
+}
+
+function validatePromptConfig(pc: unknown): { valid: boolean; error?: string } {
+  if (pc === undefined || pc === null) return { valid: true };
+  if (typeof pc !== "object" || Array.isArray(pc)) {
+    return { valid: false, error: "prompt_config must be an object." };
+  }
+  const obj = pc as Record<string, unknown>;
+  if (obj.system_prompt !== undefined && typeof obj.system_prompt !== "string") {
+    return { valid: false, error: "prompt_config.system_prompt must be a string." };
+  }
+  if (obj.user_message !== undefined && typeof obj.user_message !== "string") {
+    return { valid: false, error: "prompt_config.user_message must be a string." };
+  }
+  if (obj.model_provider !== undefined) {
+    if (typeof obj.model_provider !== "string" || !VALID_PROVIDERS.includes(obj.model_provider as ModelProvider)) {
+      return { valid: false, error: `prompt_config.model_provider must be one of: ${VALID_PROVIDERS.join(", ")}.` };
+    }
+  }
+  if (obj.model_name !== undefined && typeof obj.model_name !== "string") {
+    return { valid: false, error: "prompt_config.model_name must be a string." };
+  }
+  if (obj.temperature !== undefined) {
+    if (typeof obj.temperature !== "number" || obj.temperature < 0 || obj.temperature > 1) {
+      return { valid: false, error: "prompt_config.temperature must be a number between 0 and 1." };
+    }
+  }
+  if (obj.max_tokens !== undefined) {
+    if (typeof obj.max_tokens !== "number" || obj.max_tokens < 1 || obj.max_tokens > 32768) {
+      return { valid: false, error: "prompt_config.max_tokens must be a number between 1 and 32768." };
+    }
+  }
+  if (obj.provider_api_key !== undefined && typeof obj.provider_api_key !== "string") {
+    return { valid: false, error: "prompt_config.provider_api_key must be a string." };
+  }
+  return { valid: true };
+}
 
 const PAGE_FILENAMES: Record<string, string> = {
   home: "index.html",
@@ -70,6 +132,98 @@ interface PageRequestBody {
   page: string;
   design_system: DesignSystemInput;
   photos: PhotoInput[];
+  prompt_config?: PromptConfig;
+}
+
+// ---------------------------------------------------------------------------
+// Spec resolution (for prompt template variable building)
+// ---------------------------------------------------------------------------
+
+const PALETTES: Record<string, { background: string; primary: string; accent: string; text: string; cta: string }> = {
+  sage_sand: { background: "#f5f0e8", primary: "#5f7161", accent: "#c9b99a", text: "#3d3d3d", cta: "#5f7161" },
+  blush_neutral: { background: "#fdf6f0", primary: "#c9928e", accent: "#d4c5b9", text: "#4a4a4a", cta: "#c9928e" },
+  deep_earth: { background: "#f0ebe3", primary: "#6b4c3b", accent: "#a08060", text: "#2d2d2d", cta: "#6b4c3b" },
+  ocean_calm: { background: "#f0f4f5", primary: "#3d6b7e", accent: "#8fb8c9", text: "#2d3b3e", cta: "#3d6b7e" },
+};
+
+const TYPOGRAPHY_PRESETS: Record<string, { heading: string; body: string }> = {
+  modern: { heading: "Inter", body: "Inter" },
+  classic: { heading: "Playfair Display", body: "Source Sans 3" },
+  mixed: { heading: "DM Serif Display", body: "Inter" },
+};
+
+const HEX_RE = /^#[0-9a-fA-F]{6}$/;
+
+function isValidSocialLink(url: string): boolean {
+  return url.startsWith("https://") && url.length <= 500;
+}
+
+// deno-lint-ignore no-explicit-any
+function resolveSpecForPrompt(spec: any): ResolvedSpecForPrompt {
+  let colours: ResolvedSpecForPrompt["colours"];
+  let headingFont: string;
+  let bodyFont: string;
+  let spacingDensity = "default";
+  let borderRadius = "rounded";
+  let typographyScale = "default";
+
+  if (spec.design) {
+    colours = spec.design.colours ?? PALETTES["sage_sand"]!;
+    headingFont = spec.design.typography?.headingFont ?? TYPOGRAPHY_PRESETS["modern"]!.heading;
+    bodyFont = spec.design.typography?.bodyFont ?? TYPOGRAPHY_PRESETS["modern"]!.body;
+    spacingDensity = spec.design.spacing?.density ?? "default";
+    borderRadius = spec.design.borderRadius ?? "rounded";
+    typographyScale = spec.design.typography?.scale ?? "default";
+  } else if (spec.palette === "custom" && spec.custom_colours) {
+    const cc = spec.custom_colours;
+    const valid = ["background", "primary", "accent", "text", "cta"].every(
+      (k: string) => HEX_RE.test(cc[k] ?? ""),
+    );
+    colours = valid
+      ? {
+          background: cc.background, primary: cc.primary, accent: cc.accent,
+          text: cc.text, cta: cc.cta,
+          background_description: cc.background_description, primary_description: cc.primary_description,
+          accent_description: cc.accent_description, text_description: cc.text_description,
+          cta_description: cc.cta_description,
+        }
+      : PALETTES["sage_sand"]!;
+    const typo = TYPOGRAPHY_PRESETS[spec.typography] ?? TYPOGRAPHY_PRESETS["modern"]!;
+    headingFont = spec.font_heading ?? typo.heading;
+    bodyFont = spec.font_body ?? typo.body;
+  } else {
+    colours = PALETTES[spec.palette] ?? PALETTES["sage_sand"]!;
+    const typo = TYPOGRAPHY_PRESETS[spec.typography] ?? TYPOGRAPHY_PRESETS["modern"]!;
+    headingFont = spec.font_heading ?? typo.heading;
+    bodyFont = spec.font_body ?? typo.body;
+  }
+
+  const socialLinks: Array<{ platform: string; url: string }> = [];
+  if (spec.social_links && typeof spec.social_links === "object") {
+    for (const [platform, url] of Object.entries(spec.social_links)) {
+      if (typeof url === "string" && isValidSocialLink(url)) {
+        socialLinks.push({ platform, url });
+      }
+    }
+  }
+
+  return {
+    businessName: spec.business_name ?? "My Site",
+    doulaName: spec.doula_name ?? "",
+    tagline: spec.tagline ?? "",
+    serviceArea: spec.service_area ?? "",
+    style: spec.style ?? "modern",
+    colours,
+    headingFont,
+    bodyFont,
+    pages: spec.pages ?? ["home", "about", "services", "contact"],
+    socialLinks,
+    spacingDensity,
+    borderRadius,
+    typographyScale,
+    brandFeeling: spec.brand_feeling ?? "",
+    year: new Date().getFullYear(),
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -427,101 +581,66 @@ ${repairBlock}
 Use the output_page tool to return the complete HTML page.`;
 }
 
-async function requestPageFromClaude(
+async function requestPage(
   page: string,
   apiKey: string,
   systemPrompt: string,
   userMessage: string,
+  promptConfig?: PromptConfig,
 ): Promise<ClaudePageResult> {
-  let claudeResponse: Response;
+  const provider: ModelProvider =
+    (promptConfig?.model_provider as ModelProvider) ?? "anthropic";
+  const model = promptConfig?.model_name ?? DEFAULT_MODEL;
+  const effectiveApiKey = promptConfig?.provider_api_key ?? apiKey;
+  const maxTokens = promptConfig?.max_tokens ?? DEFAULT_MAX_TOKENS;
+
   try {
-    claudeResponse = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model: "claude-sonnet-4-5-20250929",
-        max_tokens: 16384,
-        system: systemPrompt,
-        messages: [{ role: "user", content: userMessage }],
-        tools: [OUTPUT_TOOL],
-        tool_choice: { type: "tool", name: "output_page" },
-      }),
+    const response = await callModel({
+      provider,
+      model,
+      apiKey: effectiveApiKey,
+      systemPrompt,
+      userMessage,
+      tools: [OUTPUT_TOOL as ToolDefinition],
+      forcedTool: "output_page",
+      temperature: promptConfig?.temperature,
+      maxTokens,
     });
-  } catch (fetchError: unknown) {
-    const detail = fetchError instanceof Error ? fetchError.message : "Unknown fetch error";
-    console.error(`[generate-page:${page}] Claude API fetch failed:`, detail);
+
+    if (response.stopReason === "max_tokens") {
+      console.error(`[generate-page:${page}] Model hit max_tokens limit`);
+      if (!response.toolInput?.html) {
+        return {
+          html: null,
+          error: `Page generation for ${page} was cut short. Please try again.`,
+          status: 500,
+        };
+      }
+    }
+
+    if (
+      response.toolName !== "output_page" ||
+      !response.toolInput ||
+      typeof response.toolInput.html !== "string"
+    ) {
+      console.error(`[generate-page:${page}] No valid tool_use payload in model response`);
+      return {
+        html: null,
+        error: `Failed to generate ${page} page. Please try again.`,
+        status: 500,
+      };
+    }
+
+    return { html: response.toolInput.html as string, error: null, status: 200 };
+  } catch (err: unknown) {
+    const detail = err instanceof Error ? err.message : "Unknown error";
+    console.error(`[generate-page:${page}] Model API call failed:`, detail);
     return {
       html: null,
       error: "The AI service is currently unavailable. Please try again.",
       status: 502,
     };
   }
-
-  if (!claudeResponse.ok) {
-    const errorText = await claudeResponse.text();
-    console.error(
-      `[generate-page:${page}] Claude API error (HTTP ${claudeResponse.status}):`,
-      errorText,
-    );
-    return {
-      html: null,
-      error: `Failed to generate ${page} page. Please try again.`,
-      status: 502,
-    };
-  }
-
-  // deno-lint-ignore no-explicit-any
-  let claudeData: any;
-  try {
-    claudeData = await claudeResponse.json();
-  } catch (parseErr: unknown) {
-    const detail = parseErr instanceof Error ? parseErr.message : "Unknown parse error";
-    console.error(`[generate-page:${page}] Failed to parse Claude response:`, detail);
-    return {
-      html: null,
-      error: `Failed to generate ${page} page. Please try again.`,
-      status: 500,
-    };
-  }
-
-  if (claudeData.stop_reason === "max_tokens") {
-    console.error(`[generate-page:${page}] Claude hit max_tokens limit`);
-    const partialToolUse = claudeData.content?.find(
-      // deno-lint-ignore no-explicit-any
-      (block: any) => block.type === "tool_use" && block.name === "output_page",
-    );
-    if (!partialToolUse?.input?.html) {
-      return {
-        html: null,
-        error: `Page generation for ${page} was cut short. Please try again.`,
-        status: 500,
-      };
-    }
-  }
-
-  const toolUse = claudeData.content?.find(
-    // deno-lint-ignore no-explicit-any
-    (block: any) => block.type === "tool_use" && block.name === "output_page",
-  );
-
-  if (!toolUse?.input?.html || typeof toolUse.input.html !== "string") {
-    console.error(
-      `[generate-page:${page}] No valid tool_use block. stop_reason=${claudeData.stop_reason}, content_types=${
-        claudeData.content?.map((b: { type: string }) => b.type).join(",") ?? "none"
-      }`,
-    );
-    return {
-      html: null,
-      error: `Failed to generate ${page} page. Please try again.`,
-      status: 500,
-    };
-  }
-
-  return { html: toolUse.input.html, error: null, status: 200 };
 }
 
 // ---------------------------------------------------------------------------
@@ -576,6 +695,12 @@ Deno.serve(async (req: Request): Promise<Response> => {
     return jsonResponse({ error: "Missing design_system fields (css, nav_html, footer_html)." }, 400, cors);
   }
 
+  // Validate prompt_config if provided (A/B testing harness)
+  const pcValidation = validatePromptConfig(body.prompt_config);
+  if (!pcValidation.valid) {
+    return jsonResponse({ error: pcValidation.error! }, 400, cors);
+  }
+
   // 4. Fetch spec
   const serviceClient = createServiceClient();
   const { data: spec, error: specError } = await serviceClient
@@ -590,15 +715,33 @@ Deno.serve(async (req: Request): Promise<Response> => {
   }
 
   // 5. Build system prompt with spec data and design system context
-  const systemPrompt = buildSystemPrompt(body.page, spec, body.design_system, body.photos ?? []);
+  // If prompt_config.system_prompt is provided, resolve its {{variables}} from the spec.
+  // Otherwise, use the hardcoded buildSystemPrompt() for production behaviour.
+  let systemPrompt: string;
+  if (body.prompt_config?.system_prompt) {
+    const resolved = resolveSpecForPrompt(spec);
+    const variables = buildPageVariables(resolved, spec, body.page);
+    systemPrompt = resolveTemplate(body.prompt_config.system_prompt, variables);
+  } else {
+    systemPrompt = buildSystemPrompt(body.page, spec, body.design_system, body.photos ?? []);
+  }
 
   // 6. Generate page, then enforce structure if needed
-  const initialMessage = buildUserMessage(body.page, body.design_system, "initial");
-  const initialResult = await requestPageFromClaude(
+  let initialMessage: string;
+  if (body.prompt_config?.user_message) {
+    const resolved = resolveSpecForPrompt(spec);
+    const variables = buildPageVariables(resolved, spec, body.page);
+    initialMessage = resolveTemplate(body.prompt_config.user_message, variables);
+  } else {
+    initialMessage = buildUserMessage(body.page, body.design_system, "initial");
+  }
+
+  const initialResult = await requestPage(
     body.page,
     auth!.claudeApiKey,
     systemPrompt,
     initialMessage,
+    body.prompt_config,
   );
 
   if (initialResult.error || !initialResult.html) {
@@ -617,11 +760,12 @@ Deno.serve(async (req: Request): Promise<Response> => {
       `[generate-page:${body.page}] Validation failed; retrying with stricter guidance: ${validation.issues.join("; ")}`,
     );
     const repairMessage = buildUserMessage(body.page, body.design_system, "repair", validation.issues);
-    const repairResult = await requestPageFromClaude(
+    const repairResult = await requestPage(
       body.page,
       auth!.claudeApiKey,
       systemPrompt,
       repairMessage,
+      body.prompt_config,
     );
 
     if (repairResult.error || !repairResult.html) {

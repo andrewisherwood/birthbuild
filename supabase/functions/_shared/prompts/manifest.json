@@ -1,0 +1,20 @@
+{
+  "design-system": {
+    "production": "v1-structured",
+    "variants": {
+      "v1-structured": {
+        "description": "Original rigid prompt with all mandatory sections, required CSS selectors, and strict colour/font rules",
+        "file": "design-system/v1-structured.md"
+      }
+    }
+  },
+  "generate-page": {
+    "production": "v1-structured",
+    "variants": {
+      "v1-structured": {
+        "description": "Original rigid page prompt with mandatory design system fidelity rules and per-page requirements",
+        "file": "generate-page/v1-structured.md"
+      }
+    }
+  }
+}

@@ -160,7 +160,7 @@ function toOpenAITools(tools: ToolDefinition[]): OpenAITool[] {
 async function callOpenAI(req: ModelRequest): Promise<ModelResponse> {
   const body: Record<string, unknown> = {
     model: req.model,
-    max_tokens: req.maxTokens,
+    max_completion_tokens: req.maxTokens,
     messages: [
       { role: "system", content: req.systemPrompt },
       { role: "user", content: req.userMessage },

@@ -160,7 +160,13 @@ birthbuild/
 │   ├── functions/
 │   │   ├── _shared/
 │   │   │   ├── edge-helpers.ts    # CORS, auth, DB-backed rate limiting, body size validation
-│   │   │   └── sanitise-html.ts   # HTML + CSS sanitisation for LLM output
+│   │   │   ├── sanitise-html.ts   # HTML + CSS sanitisation for LLM output
+│   │   │   ├── model-client.ts    # Multi-provider LLM abstraction (Anthropic + OpenAI)
+│   │   │   ├── prompt-resolver.ts # Template {{variable}} resolver for prompt A/B testing
+│   │   │   └── prompts/           # Prompt variant registry for A/B testing
+│   │   │       ├── manifest.json                    # Variant registry (production + variants per endpoint)
+│   │   │       ├── design-system/v1-structured.md   # Current design system prompt as template
+│   │   │       └── generate-page/v1-structured.md   # Current page prompt as template
 │   │   ├── chat/index.ts          # Claude API proxy + tool calling
 │   │   ├── build/index.ts         # Site generation + Netlify deploy (preview first)
 │   │   ├── generate-design-system/index.ts  # LLM: shared CSS, nav, footer generation
@@ -217,6 +223,7 @@ birthbuild/
 - **Instructor multi-site** — instructors can create multiple sites via `/admin/sites`. The `?site_id=` query param threads through `/chat` and `/dashboard` to scope to a specific spec. Student flow (no `site_id`) fetches their single spec.
 - **Chat tool calling** — Claude uses function calling (`tool_use`) to write structured data to the site spec (e.g. `set_business_info`, `set_style`). The `trigger_photo_upload` tool shows an inline upload panel. `mark_step_complete` transitions the chat step state.
 - **Two build paths** — Template build (deterministic, client-side HTML generation) and LLM build (AI-generated pages via Edge Functions). The LLM path: generate-design-system → generate-page (parallel, per page) → save checkpoint → deploy to Netlify.
+- **Prompt A/B testing infrastructure** — Both `generate-design-system` and `generate-page` accept an optional `prompt_config` body field enabling the persona-harness to override prompts, model, and provider. When absent, production behaviour is unchanged (hardcoded prompt, Anthropic Sonnet). `model-client.ts` abstracts Anthropic/OpenAI into a common `callModel()` interface. `prompt-resolver.ts` resolves `{{variable}}` placeholders in template files from the resolved spec. Prompt variant files live in `_shared/prompts/` with a `manifest.json` registry. `prompt_config.provider_api_key` is used in-flight only, never stored or logged.
 - **Checkpoint system** — Versioned HTML snapshots in `site_checkpoints` table. Each checkpoint stores full HTML pages + cached design system. Retention trigger prunes to last 10 per site. Unique constraint on `(site_spec_id, version)` with retry logic for concurrent writes.
 - **Section markers** — `<!-- bb-section:name -->...<!-- /bb-section:name -->` HTML comments enable deterministic editing (reorder, remove, replace) without re-running the LLM.
 - **Generated site visual components** — Both template and LLM build paths produce consistent visual patterns:

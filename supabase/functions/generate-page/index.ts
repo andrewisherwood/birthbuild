@@ -318,12 +318,14 @@ function buildSystemPrompt(page: string, spec: any, designSystem: DesignSystemIn
       if (trainingYear) aboutExtras.push(`- Training year: ${trainingYear}`);
       const aboutExtrasStr = aboutExtras.length > 0 ? "\n" + aboutExtras.join("\n") : "";
       pageSpecific = `## About Page Requirements
+- **Hero**: Use \`.hero .hero--inner\` (NOT the full 85vh hero). Same layered structure as homepage hero (.hero__bg, .hero__overlay, .hero__content) but shorter. h1 + tagline only, no CTA button.
 - **Entity-rich h1**: "About ${doulaName || businessName}${primaryLocation ? ` | ${primaryLocation}` : serviceArea ? ` | ${serviceArea}` : ""}"
-- Bio section with the birth worker's biography. Start with an answer-first opening sentence.
-- Philosophy section with their approach statement
-- Qualifications section${doulaUk ? " (mention Doula UK membership)" : ""}${trainingProvider ? ` (trained with: ${trainingProvider})` : ""}${aboutExtrasStr}
-- CTA section encouraging visitors to get in touch
-- If a headshot photo is available, display it prominently
+- **Bio section layout**: Use a \`.section > .section-inner > .about-content\` grid. Place the headshot image on the left using \`<img class="headshot">\` and the bio text on the right in a \`<div class="bio-text">\`. This creates a two-column layout on desktop and stacks on mobile.
+- Start the bio with an answer-first opening sentence.
+- If a signature story is provided, wrap it in a \`<blockquote>\` inside the bio-text div for visual emphasis.
+- **Philosophy section**: Separate \`.section.section--alt\` with their approach statement. Heading: "My Approach".
+- **Qualifications section**: Separate \`.section\` with heading "Qualifications & Training". List qualifications using a \`<ul>\` with checkmark (✓) items.${doulaUk ? " Mention Doula UK membership." : ""}${trainingProvider ? ` Trained with: ${trainingProvider}.` : ""}${aboutExtrasStr}
+- **CTA section**: Final \`.section.section--alt.text-center\` encouraging visitors to get in touch with a .btn link to /contact.
 - **Person + Credential JSON-LD** in a <script type="application/ld+json"> block with @type Person, name, and hasCredential array listing training provider, Doula UK (if applicable), and additional training.`;
       break;
     }

@@ -70,15 +70,20 @@ Generate a complete CSS stylesheet with:
     - `.hero__tagline` — tagline-size font, white with slight transparency
     - `.btn--hero` — white background, primary-coloured text, box-shadow, hover inverts to CTA bg with white text
     - `.hero--text-only` — fallback for sites without a hero image (gradient background, lower min-height)
-13. Button styles (.btn primary CTA, .btn--outline variant)
-14. Card grid (responsive 1/2/3 columns with gap) plus .card--service variant (no padding, flex column, overflow hidden) with .card__image (200px height, object-fit cover, scale hover), .card__body (padded), .card__link (CTA-coloured arrow link)
-15. Testimonial styles (border-left accent, blockquote italic)
-16. FAQ styles (details/summary, no default marker, +/- icons)
-17. Contact form styles (form groups, labels, inputs, textareas, focus states)
-18. Footer styles (primary bg, white text, social links row, copyright)
-19. Utility classes (.text-center, .mt-2, .mt-3, .mb-2)
-20. Responsive breakpoints at 640px, 768px, 900px
-21. Be creative with your design while respecting the colour palette and style preference. Add subtle transitions, shadows, gradients, or decorative elements that match the {{style}} aesthetic.
+    - `.hero--inner` — shorter hero for inner pages (about, services, etc.): min-height: 50vh instead of 85vh
+13. About/bio page layout styles:
+    - `.about-content` — display: grid; grid-template-columns: 1fr on mobile, 350px 1fr at ≥768px; gap: 3rem; align-items: start
+    - `.headshot` — max-width: 400px; width: 100%; border-radius: var(--img-radius); object-fit: cover
+    - `.bio-text blockquote` — border-left: 3px solid var(--colour-accent); padding-left: 1.5rem; margin: 2rem 0; font-style: italic
+14. Button styles (.btn primary CTA, .btn--outline variant)
+15. Card grid (responsive 1/2/3 columns with gap) plus .card--service variant (no padding, flex column, overflow hidden) with .card__image (200px height, object-fit cover, scale hover), .card__body (padded), .card__link (CTA-coloured arrow link)
+16. Testimonial styles (border-left accent, blockquote italic)
+17. FAQ styles (details/summary, no default marker, +/- icons)
+18. Contact form styles (form groups, labels, inputs, textareas, focus states)
+19. Footer styles (primary bg, white text, social links row, copyright)
+20. Utility classes (.text-center, .mt-2, .mt-3, .mb-2)
+21. Responsive breakpoints at 640px, 768px, 900px
+22. Be creative with your design while respecting the colour palette and style preference. Add subtle transitions, shadows, gradients, or decorative elements that match the {{style}} aesthetic.
 
 ### Navigation HTML
 Generate a semantic `<header>` element with:

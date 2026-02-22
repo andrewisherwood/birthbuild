@@ -337,14 +337,17 @@ export function useBuild(siteSpec: SiteSpec | null): UseBuildReturn {
       console.log("[useBuild] Calling generate-design-system…");
       setProgress("design-system");
 
-      const { data: dsData, error: dsError } = await invokeEdgeFunction<{
+      type DesignSystemResponse = {
         success?: boolean;
         css?: string;
         nav_html?: string;
         footer_html?: string;
         wordmark_svg?: string;
+        validation_issues?: string[];
         error?: string;
-      }>(
+      };
+
+      const { data: dsData, error: dsError } = await invokeEdgeFunction<DesignSystemResponse>(
         "generate-design-system",
         { site_spec_id: spec.id },
         { timeoutMs: EDGE_TIMEOUTS.designSystemMs },
@@ -358,7 +361,7 @@ export function useBuild(siteSpec: SiteSpec | null): UseBuildReturn {
         return;
       }
 
-      const designResponse = dsData;
+      let designResponse = dsData;
 
       if (designResponse?.error || !designResponse?.css) {
         const msg = designResponse?.error ?? "Design system generation failed.";
@@ -369,10 +372,34 @@ export function useBuild(siteSpec: SiteSpec | null): UseBuildReturn {
         return;
       }
 
+      // Client-side retry: if validation issues found, re-invoke with repair prompt
+      const validationIssues = designResponse.validation_issues ?? [];
+      if (validationIssues.length > 0) {
+        console.warn("[useBuild] Design system validation issues:", validationIssues);
+        setProgress("design-system-retry");
+        logEvent("design_system_retry", { issues: validationIssues }, { siteSpecId: spec.id, userId: spec.user_id });
+
+        const { data: retryData, error: retryError } = await invokeEdgeFunction<DesignSystemResponse>(
+          "generate-design-system",
+          { site_spec_id: spec.id, repair_issues: validationIssues },
+          { timeoutMs: EDGE_TIMEOUTS.designSystemMs },
+        );
+
+        if (!retryError && retryData?.css) {
+          console.log("[useBuild] Design system retry succeeded.");
+          designResponse = retryData;
+        } else {
+          console.warn("[useBuild] Design system retry failed, using original result.", retryError);
+          // Fall back to original (imperfect) result — continue with what we have
+        }
+      }
+
       console.log("[useBuild] Design system generated successfully.");
 
+      // css is guaranteed non-empty: initial call checked !designResponse?.css
+      // above, and retry only replaces designResponse if retryData.css is truthy.
       const designSystem: CheckpointDesignSystem = {
-        css: designResponse.css,
+        css: designResponse.css as string,
         nav_html: designResponse.nav_html ?? "",
         footer_html: designResponse.footer_html ?? "",
         wordmark_svg: designResponse.wordmark_svg,

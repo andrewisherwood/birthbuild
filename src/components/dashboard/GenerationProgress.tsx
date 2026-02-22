@@ -10,6 +10,7 @@
 
 export type GenerationStage =
   | "design-system"
+  | "design-system-retry"
   | "pages"
   | "saving"
   | "deploying"
@@ -33,6 +34,7 @@ interface GenerationProgressProps {
 
 const STAGE_LABELS: Record<GenerationStage, string> = {
   "design-system": "Generating design system...",
+  "design-system-retry": "Refining design system...",
   pages: "Generating pages",
   saving: "Saving checkpoint...",
   deploying: "Deploying to preview...",
@@ -52,7 +54,7 @@ export function GenerationProgressIndicator({ progress }: GenerationProgressProp
       : STAGE_LABELS[stage];
 
   const percentage =
-    stage === "design-system"
+    stage === "design-system" || stage === "design-system-retry"
       ? 15
       : stage === "pages" && total > 0
         ? 15 + Math.round((current / total) * 60)

@@ -4,8 +4,8 @@
  * Generates the shared CSS, navigation HTML, and footer HTML from a SiteSpec.
  * This is the "creative vision" call — it establishes the site's visual identity.
  *
- * Input:  { site_spec_id }
- * Output: { css, nav_html, footer_html, wordmark_svg }
+ * Input:  { site_spec_id, repair_issues? }
+ * Output: { css, nav_html, footer_html, wordmark_svg, validation_issues }
  */
 
 import {
@@ -649,7 +649,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
   const sizeErr = checkBodySize(req, cors);
   if (sizeErr) return sizeErr;
 
-  let body: { site_spec_id?: string };
+  let body: { site_spec_id?: string; repair_issues?: string[] };
   try {
     body = await req.json();
   } catch {
@@ -658,6 +658,17 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
   if (!body.site_spec_id || !UUID_RE.test(body.site_spec_id)) {
     return jsonResponse({ error: "Missing or invalid site_spec_id." }, 400, cors);
+  }
+
+  // Validate repair_issues if provided
+  if (body.repair_issues !== undefined) {
+    if (
+      !Array.isArray(body.repair_issues) ||
+      body.repair_issues.length > 50 ||
+      !body.repair_issues.every((item: unknown) => typeof item === "string")
+    ) {
+      return jsonResponse({ error: "repair_issues must be an array of up to 50 strings." }, 400, cors);
+    }
   }
 
   // 4. Fetch spec via service role (bypasses RLS for full access)
@@ -684,28 +695,30 @@ Deno.serve(async (req: Request): Promise<Response> => {
     resolved.style,
   );
 
-  // 7. Call Claude API
+  // 7. Call Claude API (single pass — client handles retry with repair_issues)
   const systemPrompt = buildSystemPrompt(resolved);
-  const initialPrompt =
-    "Generate the complete CSS design system, navigation header HTML, and footer HTML for this birth worker's website. Use the output_design_system tool to return your work.";
+  const userMessage =
+    body.repair_issues && body.repair_issues.length > 0
+      ? buildRepairPrompt(body.repair_issues)
+      : "Generate the complete CSS design system, navigation header HTML, and footer HTML for this birth worker's website. Use the output_design_system tool to return your work.";
 
-  const initialResult = await requestDesignSystemFromClaude(
+  const result = await requestDesignSystemFromClaude(
     auth!.claudeApiKey,
     systemPrompt,
-    initialPrompt,
+    userMessage,
   );
 
-  if (initialResult.error || !initialResult.payload) {
+  if (result.error || !result.payload) {
     return jsonResponse(
-      { error: initialResult.error ?? "Failed to generate design system. Please try again." },
-      initialResult.status,
+      { error: result.error ?? "Failed to generate design system. Please try again." },
+      result.status,
       cors,
     );
   }
 
-  let sanitisedResult = sanitiseDesignSystemOutput(initialResult.payload);
+  const sanitisedResult = sanitiseDesignSystemOutput(result.payload);
   let validation = validateDesignSystemOutput(sanitisedResult.payload);
-  if (initialResult.stopReason === "max_tokens") {
+  if (result.stopReason === "max_tokens") {
     validation = {
       valid: false,
       issues: ["Model response hit max_tokens (possible truncation).", ...validation.issues],
@@ -714,42 +727,8 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
   if (!validation.valid) {
     console.warn(
-      `[generate-design-system] Validation failed; retrying with stricter guidance: ${validation.issues.join("; ")}`,
+      `[generate-design-system] Validation issues (${validation.issues.length}): ${validation.issues.join("; ")}`,
     );
-
-    const repairResult = await requestDesignSystemFromClaude(
-      auth!.claudeApiKey,
-      systemPrompt,
-      buildRepairPrompt(validation.issues),
-    );
-
-    if (repairResult.error || !repairResult.payload) {
-      return jsonResponse(
-        { error: repairResult.error ?? "Failed to generate design system. Please try again." },
-        repairResult.status,
-        cors,
-      );
-    }
-
-    sanitisedResult = sanitiseDesignSystemOutput(repairResult.payload);
-    validation = validateDesignSystemOutput(sanitisedResult.payload);
-    if (repairResult.stopReason === "max_tokens") {
-      validation = {
-        valid: false,
-        issues: ["Model response hit max_tokens (possible truncation).", ...validation.issues],
-      };
-    }
-
-    if (!validation.valid) {
-      console.error(
-        `[generate-design-system] Validation failed after retry: ${validation.issues.join("; ")}`,
-      );
-      return jsonResponse(
-        { error: "Design system generation returned incomplete styling. Please try again." },
-        500,
-        cors,
-      );
-    }
   }
 
   // 8. Log sanitiser events (if any)
@@ -768,6 +747,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
       nav_html: sanitisedResult.payload.nav_html,
       footer_html: sanitisedResult.payload.footer_html,
       wordmark_svg: wordmarkSvg,
+      validation_issues: validation.valid ? [] : validation.issues,
     },
     200,
     cors,

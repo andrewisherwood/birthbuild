@@ -188,6 +188,9 @@ export interface CssSanitiseResult {
   stripped: string[];
 }
 
+/** Matches CSS comments. */
+const CSS_COMMENT_RE = /\/\*[\s\S]*?\*\//g;
+
 export function sanitiseCss(css: string): CssSanitiseResult {
   const stripped: string[] = [];
   let sanitised = css;
@@ -195,10 +198,24 @@ export function sanitiseCss(css: string): CssSanitiseResult {
     stripped.push("Blocked </style> breakout");
     return "/* blocked */";
   });
-  sanitised = sanitised.replace(CSS_IMPORT_RE, (match) => {
+
+  // Protect CSS comments before running @import regex — prevents false
+  // positives when @import is mentioned inside a comment (e.g.
+  // "/* Google Fonts loaded via <link>, not via @import */").
+  const comments: string[] = [];
+  const withoutComments = sanitised.replace(CSS_COMMENT_RE, (match) => {
+    comments.push(match);
+    return `__CSS_COMMENT_${comments.length - 1}__`;
+  });
+  let importSanitised = withoutComments.replace(CSS_IMPORT_RE, (match) => {
     stripped.push(`Blocked @import: ${match.slice(0, 80)}`);
     return "/* blocked */";
   });
+  for (let i = 0; i < comments.length; i++) {
+    importSanitised = importSanitised.replace(`__CSS_COMMENT_${i}__`, comments[i]!);
+  }
+  sanitised = importSanitised;
+
   sanitised = sanitised.replace(CSS_EXPRESSION_RE, () => {
     stripped.push("Blocked expression()");
     return "/* blocked */(";

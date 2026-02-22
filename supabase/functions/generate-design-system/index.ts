@@ -357,6 +357,266 @@ const OUTPUT_TOOL = {
 };
 
 // ---------------------------------------------------------------------------
+// Output validation + Claude request helpers
+// ---------------------------------------------------------------------------
+
+const MIN_CSS_CHARS = 1800;
+const REQUIRED_CSS_VARS = [
+  "colour-bg",
+  "colour-primary",
+  "colour-accent",
+  "colour-text",
+  "colour-cta",
+  "font-heading",
+  "font-body",
+  "max-width",
+  "section-padding",
+  "h1-size",
+  "body-size",
+];
+const REQUIRED_CSS_SELECTORS = [
+  "body",
+  "h1",
+  ".skip-link",
+  ".nav-link",
+  ".nav-link--active",
+  ".section",
+  ".section-inner",
+  ".section--alt",
+  ".hero",
+  ".btn",
+  ".btn--outline",
+  ".cards",
+  ".card",
+  ".card--service",
+  ".card__image",
+  ".card__body",
+  ".card__link",
+  ".price",
+];
+
+interface DesignSystemPayload {
+  css: string;
+  nav_html: string;
+  footer_html: string;
+}
+
+interface ClaudeDesignSystemResult {
+  payload: DesignSystemPayload | null;
+  error: string | null;
+  status: number;
+  stopReason: string | null;
+}
+
+interface DesignSystemValidationResult {
+  valid: boolean;
+  issues: string[];
+}
+
+interface SanitisedDesignSystemResult {
+  payload: DesignSystemPayload;
+  stripped: string[];
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function hasCssVar(css: string, variableName: string): boolean {
+  const varRe = new RegExp(`--${escapeRegExp(variableName)}\\s*:`, "i");
+  return varRe.test(css);
+}
+
+function hasCssSelector(css: string, selector: string): boolean {
+  const escaped = escapeRegExp(selector);
+  // Selector token with strict boundaries to avoid ".btn" matching ".btn--outline".
+  const selectorRe = new RegExp(`(^|[^-_a-zA-Z0-9])${escaped}(?![-_a-zA-Z0-9])`, "m");
+  return selectorRe.test(css);
+}
+
+function validateDesignSystemOutput(payload: DesignSystemPayload): DesignSystemValidationResult {
+  const issues: string[] = [];
+  const css = payload.css;
+  const nav = payload.nav_html;
+  const footer = payload.footer_html;
+
+  if (css.trim().length < MIN_CSS_CHARS) {
+    issues.push(`CSS output too short (${css.trim().length} chars).`);
+  }
+
+  for (const variableName of REQUIRED_CSS_VARS) {
+    if (!hasCssVar(css, variableName)) {
+      issues.push(`Missing CSS variable --${variableName}.`);
+    }
+  }
+
+  for (const selector of REQUIRED_CSS_SELECTORS) {
+    if (!hasCssSelector(css, selector)) {
+      issues.push(`Missing CSS selector ${selector}.`);
+    }
+  }
+
+  if (!/<header\b/i.test(nav)) issues.push("Navigation markup missing <header>.");
+  if (!/<nav\b/i.test(nav)) issues.push("Navigation markup missing <nav>.");
+  if (!/\bskip-link\b/.test(nav)) issues.push("Navigation markup missing .skip-link.");
+  if (!/\bnav-link\b/.test(nav)) issues.push("Navigation markup missing .nav-link.");
+  if (!/\{\{WORDMARK_SVG\}\}/.test(nav)) issues.push("Navigation markup missing {{WORDMARK_SVG}} placeholder.");
+  if (!/\{\{ACTIVE_PAGE\}\}/.test(nav)) issues.push("Navigation markup missing {{ACTIVE_PAGE}} placeholder.");
+
+  if (!/<footer\b/i.test(footer)) issues.push("Footer markup missing <footer>.");
+  if (!/tracking cookies/i.test(footer)) issues.push("Footer markup missing privacy note.");
+  if (!/(?:&copy;|&#169;|copyright)/i.test(footer)) issues.push("Footer markup missing copyright line.");
+
+  return { valid: issues.length === 0, issues };
+}
+
+function sanitiseDesignSystemOutput(payload: DesignSystemPayload): SanitisedDesignSystemResult {
+  const { css: sanitisedCss, stripped: cssStripped } = sanitiseCss(payload.css);
+  const { html: sanitisedNavHtml, stripped: navStripped } = sanitiseHtml(payload.nav_html);
+  const { html: sanitisedFooterHtml, stripped: footerStripped } = sanitiseHtml(payload.footer_html);
+
+  return {
+    payload: {
+      css: sanitisedCss,
+      nav_html: sanitisedNavHtml,
+      footer_html: sanitisedFooterHtml,
+    },
+    stripped: [...cssStripped, ...navStripped, ...footerStripped],
+  };
+}
+
+function parseToolPayload(content: unknown): DesignSystemPayload | null {
+  if (!Array.isArray(content)) return null;
+
+  for (const block of content) {
+    if (!block || typeof block !== "object") continue;
+    const record = block as Record<string, unknown>;
+    if (record.type !== "tool_use" || record.name !== "output_design_system") continue;
+    if (!record.input || typeof record.input !== "object") return null;
+
+    const input = record.input as Record<string, unknown>;
+    if (
+      typeof input.css !== "string" ||
+      typeof input.nav_html !== "string" ||
+      typeof input.footer_html !== "string"
+    ) {
+      return null;
+    }
+
+    return {
+      css: input.css,
+      nav_html: input.nav_html,
+      footer_html: input.footer_html,
+    };
+  }
+
+  return null;
+}
+
+function buildRepairPrompt(issues: string[]): string {
+  return `Your previous output failed server validation and cannot be used.
+
+Validation issues:
+- ${issues.join("\n- ")}
+
+Regenerate the complete design system from scratch now.
+Requirements:
+1. Return full css, nav_html, and footer_html via output_design_system.
+2. Include ALL required variables and selectors exactly as requested in the system prompt.
+3. Do not omit nav placeholders {{WORDMARK_SVG}} and {{ACTIVE_PAGE}}.
+4. Do not shorten the CSS. Return the complete stylesheet.`;
+}
+
+async function requestDesignSystemFromClaude(
+  apiKey: string,
+  systemPrompt: string,
+  userMessage: string,
+): Promise<ClaudeDesignSystemResult> {
+  let claudeResponse: Response;
+  try {
+    claudeResponse = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": apiKey,
+        "anthropic-version": "2023-06-01",
+      },
+      body: JSON.stringify({
+        model: "claude-sonnet-4-5-20250929",
+        max_tokens: 8192,
+        system: systemPrompt,
+        messages: [{ role: "user", content: userMessage }],
+        tools: [OUTPUT_TOOL],
+        tool_choice: { type: "tool", name: "output_design_system" },
+      }),
+    });
+  } catch (fetchError: unknown) {
+    const detail = fetchError instanceof Error ? fetchError.message : "Unknown fetch error";
+    console.error("[generate-design-system] Claude API fetch failed:", detail);
+    return {
+      payload: null,
+      error: "The AI service is currently unavailable. Please try again.",
+      status: 502,
+      stopReason: null,
+    };
+  }
+
+  if (!claudeResponse.ok) {
+    const errorText = await claudeResponse.text();
+    console.error(
+      `[generate-design-system] Claude API error (HTTP ${claudeResponse.status}):`,
+      errorText,
+    );
+    return {
+      payload: null,
+      error: "The AI service returned an error. Please try again.",
+      status: 502,
+      stopReason: null,
+    };
+  }
+
+  let claudeData: unknown;
+  try {
+    claudeData = await claudeResponse.json();
+  } catch (parseErr: unknown) {
+    const detail = parseErr instanceof Error ? parseErr.message : "Unknown parse error";
+    console.error("[generate-design-system] Failed to parse Claude response:", detail);
+    return {
+      payload: null,
+      error: "Failed to generate design system. Please try again.",
+      status: 500,
+      stopReason: null,
+    };
+  }
+
+  const dataRecord = claudeData && typeof claudeData === "object"
+    ? (claudeData as Record<string, unknown>)
+    : null;
+  const stopReason = typeof dataRecord?.stop_reason === "string" ? dataRecord.stop_reason : null;
+  if (stopReason === "max_tokens") {
+    console.error("[generate-design-system] Claude hit max_tokens limit");
+  }
+
+  const payload = parseToolPayload(dataRecord?.content);
+  if (!payload) {
+    console.error("[generate-design-system] No valid tool_use payload in Claude response");
+    return {
+      payload: null,
+      error: "Failed to generate design system. Please try again.",
+      status: 500,
+      stopReason,
+    };
+  }
+
+  return {
+    payload,
+    error: null,
+    status: 200,
+    stopReason,
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Handler
 // ---------------------------------------------------------------------------
 
@@ -426,114 +686,87 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
   // 7. Call Claude API
   const systemPrompt = buildSystemPrompt(resolved);
+  const initialPrompt =
+    "Generate the complete CSS design system, navigation header HTML, and footer HTML for this birth worker's website. Use the output_design_system tool to return your work.";
 
-  let claudeResponse: Response;
-  try {
-    claudeResponse = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": auth!.claudeApiKey,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model: "claude-sonnet-4-5-20250929",
-        max_tokens: 8192,
-        system: systemPrompt,
-        messages: [
-          {
-            role: "user",
-            content:
-              "Generate the complete CSS design system, navigation header HTML, and footer HTML for this birth worker's website. Use the output_design_system tool to return your work.",
-          },
-        ],
-        tools: [OUTPUT_TOOL],
-        tool_choice: { type: "tool", name: "output_design_system" },
-      }),
-    });
-  } catch (fetchError: unknown) {
-    const detail = fetchError instanceof Error ? fetchError.message : "Unknown fetch error";
-    console.error("[generate-design-system] Claude API fetch failed:", detail);
-    return jsonResponse(
-      { error: "The AI service is currently unavailable. Please try again." },
-      502,
-      cors,
-    );
-  }
-
-  if (!claudeResponse.ok) {
-    const errorText = await claudeResponse.text();
-    console.error(
-      `[generate-design-system] Claude API error (HTTP ${claudeResponse.status}):`,
-      errorText,
-    );
-    return jsonResponse(
-      { error: "The AI service returned an error. Please try again." },
-      502,
-      cors,
-    );
-  }
-
-  // deno-lint-ignore no-explicit-any
-  let claudeData: any;
-  try {
-    claudeData = await claudeResponse.json();
-  } catch (parseErr: unknown) {
-    const detail = parseErr instanceof Error ? parseErr.message : "Unknown parse error";
-    console.error("[generate-design-system] Failed to parse Claude response:", detail);
-    return jsonResponse(
-      { error: "Failed to generate design system. Please try again." },
-      500,
-      cors,
-    );
-  }
-
-  if (claudeData.stop_reason === "max_tokens") {
-    console.error("[generate-design-system] Claude hit max_tokens limit");
-  }
-
-  const toolUse = claudeData.content?.find(
-    // deno-lint-ignore no-explicit-any
-    (block: any) => block.type === "tool_use" && block.name === "output_design_system",
+  const initialResult = await requestDesignSystemFromClaude(
+    auth!.claudeApiKey,
+    systemPrompt,
+    initialPrompt,
   );
 
-  if (!toolUse?.input) {
-    console.error("[generate-design-system] No tool_use block in Claude response");
+  if (initialResult.error || !initialResult.payload) {
     return jsonResponse(
-      { error: "Failed to generate design system. Please try again." },
-      500,
+      { error: initialResult.error ?? "Failed to generate design system. Please try again." },
+      initialResult.status,
       cors,
     );
   }
 
-  const { css, nav_html, footer_html } = toolUse.input as {
-    css: string;
-    nav_html: string;
-    footer_html: string;
-  };
+  let sanitisedResult = sanitiseDesignSystemOutput(initialResult.payload);
+  let validation = validateDesignSystemOutput(sanitisedResult.payload);
+  if (initialResult.stopReason === "max_tokens") {
+    validation = {
+      valid: false,
+      issues: ["Model response hit max_tokens (possible truncation).", ...validation.issues],
+    };
+  }
 
-  // 8. Sanitise output
-  const { css: sanitisedCss, stripped: cssStripped } = sanitiseCss(css);
-  const { html: sanitisedNavHtml, stripped: navStripped } = sanitiseHtml(nav_html);
-  const { html: sanitisedFooterHtml, stripped: footerStripped } = sanitiseHtml(footer_html);
+  if (!validation.valid) {
+    console.warn(
+      `[generate-design-system] Validation failed; retrying with stricter guidance: ${validation.issues.join("; ")}`,
+    );
 
-  // Log security event if content was stripped
-  const allStripped = [...cssStripped, ...navStripped, ...footerStripped];
-  if (allStripped.length > 0) {
-    const serviceClient = createServiceClient();
+    const repairResult = await requestDesignSystemFromClaude(
+      auth!.claudeApiKey,
+      systemPrompt,
+      buildRepairPrompt(validation.issues),
+    );
+
+    if (repairResult.error || !repairResult.payload) {
+      return jsonResponse(
+        { error: repairResult.error ?? "Failed to generate design system. Please try again." },
+        repairResult.status,
+        cors,
+      );
+    }
+
+    sanitisedResult = sanitiseDesignSystemOutput(repairResult.payload);
+    validation = validateDesignSystemOutput(sanitisedResult.payload);
+    if (repairResult.stopReason === "max_tokens") {
+      validation = {
+        valid: false,
+        issues: ["Model response hit max_tokens (possible truncation).", ...validation.issues],
+      };
+    }
+
+    if (!validation.valid) {
+      console.error(
+        `[generate-design-system] Validation failed after retry: ${validation.issues.join("; ")}`,
+      );
+      return jsonResponse(
+        { error: "Design system generation returned incomplete styling. Please try again." },
+        500,
+        cors,
+      );
+    }
+  }
+
+  // 8. Log sanitiser events (if any)
+  if (sanitisedResult.stripped.length > 0) {
     await serviceClient.from("app_events").insert({
       user_id: auth!.userId,
       event: "sanitiser_blocked_content",
-      metadata: { component: "design-system", stripped: allStripped },
+      metadata: { component: "design-system", stripped: sanitisedResult.stripped },
     });
   }
 
   return jsonResponse(
     {
       success: true,
-      css: sanitisedCss,
-      nav_html: sanitisedNavHtml,
-      footer_html: sanitisedFooterHtml,
+      css: sanitisedResult.payload.css,
+      nav_html: sanitisedResult.payload.nav_html,
+      footer_html: sanitisedResult.payload.footer_html,
       wordmark_svg: wordmarkSvg,
     },
     200,

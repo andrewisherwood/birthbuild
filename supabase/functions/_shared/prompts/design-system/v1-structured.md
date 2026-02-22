@@ -78,7 +78,7 @@ Generate a complete CSS stylesheet with:
 14. Button styles (.btn primary CTA, .btn--outline variant)
 15. Card grid (responsive 1/2/3 columns with gap) plus .card--service variant (no padding, flex column, overflow hidden) with .card__image (200px height, object-fit cover, scale hover), .card__body (padded), .card__link (CTA-coloured arrow link)
 16. Testimonial styles (border-left accent, blockquote italic)
-17. FAQ styles (details/summary, no default marker, +/- icons)
+17. FAQ styles (details/summary, no default marker, +/- icons, max-width ~800px, margin: 0 auto for centering within section)
 18. Contact form styles (form groups, labels, inputs, textareas, focus states)
 19. Footer styles (primary bg, white text, social links row, copyright)
 20. Utility classes (.text-center, .mt-2, .mt-3, .mb-2)

@@ -61,7 +61,15 @@ Generate a complete CSS stylesheet with:
 9. Header/nav styles (sticky, border-bottom, flex layout)
 10. CSS-only hamburger menu for mobile (checkbox hack, no JavaScript)
 11. Section styles (.section, .section-inner with max-width, .section--alt)
-12. Hero styles (full-width background image with gradient overlay, centred white text, btn--hero variant with box-shadow and white-on-hover invert, 85vh min-height, fallback .hero--text-only for sites without a hero image)
+12. Hero styles — the hero uses a layered z-index stack inside a relative container. You MUST define all of these selectors:
+    - `.hero` — position: relative; min-height: 85vh; display: flex; align-items: center; justify-content: center; text-align: center; overflow: hidden; color: white
+    - `.hero__bg` — position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; z-index: 0 (this is the `<img>` element)
+    - `.hero__overlay` — position: absolute; inset: 0; z-index: 1; background: linear-gradient using primary colour at ~0.85 opacity blending to accent at ~0.75 opacity (for text readability over the photo)
+    - `.hero__content` — position: relative; z-index: 2; max-width: 800px; padding: var(--hero-padding)
+    - `.hero h1` — color: white; text-shadow for readability
+    - `.hero__tagline` — tagline-size font, white with slight transparency
+    - `.btn--hero` — white background, primary-coloured text, box-shadow, hover inverts to CTA bg with white text
+    - `.hero--text-only` — fallback for sites without a hero image (gradient background, lower min-height)
 13. Button styles (.btn primary CTA, .btn--outline variant)
 14. Card grid (responsive 1/2/3 columns with gap) plus .card--service variant (no padding, flex column, overflow hidden) with .card__image (200px height, object-fit cover, scale hover), .card__body (padded), .card__link (CTA-coloured arrow link)
 15. Testimonial styles (border-left accent, blockquote italic)

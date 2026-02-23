@@ -260,8 +260,12 @@ function buildSystemPrompt(page: string, spec: any, designSystem: DesignSystemIn
   const clientPerception = spec.client_perception ?? "";
   const signatureStory = spec.signature_story ?? "";
 
-  const photosDesc = photos.length > 0
-    ? photos.map((p) => `- ${p.purpose}: ${p.publicUrl} (alt: "${p.altText}")`).join("\n")
+  const hasPhotos = photos.length > 0;
+  const heroPhoto = photos.find((p) => p.purpose === "hero");
+  const headshotPhoto = photos.find((p) => p.purpose === "headshot");
+  const galleryPhotos = photos.filter((p) => p.purpose === "gallery");
+  const photosDesc = hasPhotos
+    ? `PHOTOS ARE PROVIDED — you MUST use every one. Do NOT use .hero--text-only when a hero photo is listed. Do NOT use plain .card when gallery photos are listed.\n${photos.map((p) => `- ${p.purpose}: ${p.publicUrl} (alt: "${p.altText}")`).join("\n")}`
     : "No photos provided.";
 
   const servicesDesc = services.length > 0
@@ -279,12 +283,42 @@ function buildSystemPrompt(page: string, spec: any, designSystem: DesignSystemIn
   let pageSpecific = "";
 
   switch (page) {
-    case "home":
+    case "home": {
+      const heroHtml = heroPhoto
+        ? `Use this EXACT hero structure (copy it literally, do NOT use .hero--text-only):
+\`\`\`html
+<section class="hero">
+  <img class="hero__bg" src="${heroPhoto.publicUrl}" alt="${heroPhoto.altText}" loading="lazy">
+  <div class="hero__overlay"></div>
+  <div class="hero__content">
+    <h1>...</h1>
+    <p class="hero__tagline">...</p>
+    <p class="hero__answer">...</p>
+    <a class="btn btn--hero" href="/contact">...</a>
+  </div>
+</section>
+\`\`\``
+        : "No hero photo — use .hero.hero--text-only with brand colour gradient.";
+      const cardHtml = galleryPhotos.length > 0
+        ? `Use .card--service with images. Here is the structure for EACH card (copy this pattern):
+\`\`\`html
+<article class="card card--service">
+  <img class="card__image" src="[gallery photo URL from Photos section]" alt="[alt]" loading="lazy">
+  <div class="card__body">
+    <h3>Service Title</h3>
+    <p>Description</p>
+    <p><strong>Price</strong></p>
+    <a class="card__link" href="/contact">Enquire</a>
+  </div>
+</article>
+\`\`\`
+Assign one gallery photo to each of the first 3 service cards.`
+        : "Use plain .card with text content (no images available).";
       pageSpecific = `## Home Page Requirements
-- Hero section: MUST use full-width background image with text overlay. Use the hero photo as an <img> with object-fit:cover positioned absolutely. Add gradient overlay div for readability. h1 + tagline + CTA in white on top. Use .hero, .hero__bg, .hero__overlay, .hero__content, .hero__tagline, .btn--hero classes. If no hero photo is available, use a text-only hero with .hero--text-only class and brand colours.
+- Hero section: ${heroHtml}
 - **Entity-rich h1**: Use "${businessName}${serviceArea ? ` — ${primaryKeyword || "Doula"} in ${serviceArea}` : ""}" as the h1 text.
 - **Answer paragraph**: After the tagline, add a <p class="hero__answer"> with: "${doulaName || businessName} provides [service names] in ${serviceArea}."
-- Services overview showing the first 3 services as cards. Each card MUST include a relevant image at the top if photos are available. Use .card--service wrapper with .card__image div (img inside) and .card__body div for text. Use .card__link for enquiry links. Fall back to plain .card if no images.
+- Services overview showing the first 3 services as cards. ${cardHtml}
 - Featured testimonial (first one, if available)
 - About preview with a brief teaser linking to about.html
 - Final CTA section encouraging visitors to get in touch
@@ -307,6 +341,7 @@ function buildSystemPrompt(page: string, spec: any, designSystem: DesignSystemIn
   }
   \`\`\``;
       break;
+    }
 
     case "about": {
       const aboutExtras: string[] = [];
@@ -320,7 +355,7 @@ function buildSystemPrompt(page: string, spec: any, designSystem: DesignSystemIn
       pageSpecific = `## About Page Requirements
 - **Hero**: Use \`.hero .hero--inner\` (NOT the full 85vh hero). Same layered structure as homepage hero (.hero__bg, .hero__overlay, .hero__content) but shorter. h1 + tagline only, no CTA button.
 - **Entity-rich h1**: "About ${doulaName || businessName}${primaryLocation ? ` | ${primaryLocation}` : serviceArea ? ` | ${serviceArea}` : ""}"
-- **Bio section layout**: Use a \`.section > .section-inner > .about-content\` grid. Place the headshot image on the left using \`<img class="headshot">\` and the bio text on the right in a \`<div class="bio-text">\`. This creates a two-column layout on desktop and stacks on mobile.
+- **Bio section layout**: Use a \`.section > .section-inner > .about-content\` grid. ${headshotPhoto ? `Place this EXACT image on the left:\n\`<img class="headshot" src="${headshotPhoto.publicUrl}" alt="${headshotPhoto.altText}" loading="lazy">\`` : "Place a placeholder area on the left."} The bio text goes on the right in a \`<div class="bio-text">\`. This creates a two-column layout on desktop and stacks on mobile.
 - Start the bio with an answer-first opening sentence.
 - If a signature story is provided, wrap it in a \`<blockquote>\` inside the bio-text div for visual emphasis.
 - **Philosophy section**: Separate \`.section.section--alt\` with their approach statement. Heading: "My Approach".
@@ -439,7 +474,7 @@ Generate a complete \`<!DOCTYPE html>\` page with:
    - The navigation HTML (with {{ACTIVE_PAGE}} replaced with "${page}")
    - \`<main id="main">\` containing all page sections with markers
    - The footer HTML
-4. If photos are available, insert \`<img>\` tags with the provided URLs, alt text, and \`loading="lazy"\`
+4. ${hasPhotos ? "Photos ARE available (listed in the Photos section above). You MUST insert them as \`<img>\` tags using the exact URLs provided, with the specified alt text and \`loading=\"lazy\"\`. A page with photos available but no \`<img>\` tags is a failed output." : "No photos available — do not add placeholder images."}
 
 ## Constraints
 - Semantic HTML5 with proper landmark roles

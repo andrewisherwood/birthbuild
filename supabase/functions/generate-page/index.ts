@@ -755,13 +755,10 @@ Deno.serve(async (req: Request): Promise<Response> => {
   // If prompt_config.system_prompt is provided, resolve its {{variables}} from the spec.
   // Otherwise, use the hardcoded buildSystemPrompt() for production behaviour.
   let systemPrompt: string;
-  if (body.prompt_config?.system_prompt) {
-    const resolved = resolveSpecForPrompt(spec);
-    const variables = buildPageVariables(resolved, spec, body.page);
-    systemPrompt = resolveTemplate(body.prompt_config.system_prompt, variables);
-  } else {
-    systemPrompt = buildSystemPrompt(body.page, spec, body.design_system, body.photos ?? []);
-  }
+  // Always use the hardcoded buildSystemPrompt() which includes photo injection,
+  // page-specific requirements, and conditional logic. Template overrides are not
+  // supported for generate-page — the prompt is too tightly coupled to runtime data.
+  systemPrompt = buildSystemPrompt(body.page, spec, body.design_system, body.photos ?? []);
 
   // 6. Generate page, then enforce structure if needed
   let initialMessage: string;
